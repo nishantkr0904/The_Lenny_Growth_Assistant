@@ -48,6 +48,7 @@ services:
       - "${HOST_PORT_BACKEND:-8000}:8000"
     volumes:
       - ./backend:/app
+      - ./data:/app/data:ro
     depends_on:
       postgres:
         condition: service_healthy

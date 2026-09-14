@@ -13,8 +13,22 @@ CREATE TABLE IF NOT EXISTS episodes (
     source_path VARCHAR(1024) NOT NULL UNIQUE,
     episode_url VARCHAR(1024),
     youtube_url VARCHAR(1024),
+    description TEXT,
+    video_id VARCHAR(64),
+    duration_seconds NUMERIC,
+    duration VARCHAR(32),
+    view_count INT,
+    channel VARCHAR(256),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backward-compatible schema evolution for existing deployments
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS video_id VARCHAR(64);
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS duration_seconds NUMERIC;
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS duration VARCHAR(32);
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS view_count INT;
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS channel VARCHAR(256);
 
 -- Transcript Chunks & Embeddings
 CREATE TABLE IF NOT EXISTS transcript_chunks (
