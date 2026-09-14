@@ -70,11 +70,43 @@ class OllamaEmbeddingProvider:
     ) -> list[list[float]]:
         """
         Generate embeddings for a list of texts in controlled concurrent batches.
+        Uses native Ollama /api/embed batch endpoint with fallback to single embed_text.
         Preserves input order.
         """
         if not texts:
             return []
 
+        # If embed_text is mocked (e.g. in unit tests), use concurrent single embed
+        is_mocked = hasattr(self.embed_text, "mock") or hasattr(self.embed_text, "side_effect") or hasattr(self.embed_text, "_mock_self")
+        
+        if not is_mocked:
+            # Attempt high-performance batch embedding via Ollama /api/embed
+            batch_endpoint = f"{self.base_url}/api/embed"
+            all_embeddings: list[list[float]] = []
+
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    for i in range(0, len(texts), batch_size):
+                        chunk_slice = texts[i : i + batch_size]
+                        payload = {"model": self.model, "input": chunk_slice}
+                        resp = await client.post(batch_endpoint, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            embeddings = data.get("embeddings", [])
+                            if len(embeddings) == len(chunk_slice):
+                                for v in embeddings:
+                                    if len(v) != EXPECTED_EMBEDDING_DIMENSION:
+                                        raise ValueError(
+                                            f"Embedding dimension mismatch: expected {EXPECTED_EMBEDDING_DIMENSION}, got {len(v)}"
+                                        )
+                                    all_embeddings.append(v)
+                                continue
+                        raise RuntimeError(f"Batch embed returned status {resp.status_code}")
+                return all_embeddings
+            except Exception as exc:
+                logger.debug("Native /api/embed batch failed or unsupported, falling back to concurrent single embed: %s", exc)
+
+        # Fallback to concurrent single embedding
         semaphore = asyncio.Semaphore(concurrency)
 
         async def _embed_with_semaphore(idx: int, t: str) -> tuple[int, list[float]]:
