@@ -6,9 +6,9 @@ updated: 2026-09-14T14:00:00Z
 
 # Roadmap
 
-> **Current Phase:** Phase P0.6 — Minimal Evaluator UI & Critical Automated Test Suite  
-> **Status:** Ready to Plan  
-> **Immediate Target:** Phase P0.6  
+> **Current Phase:** Phase P0.6 — Evaluator-Facing Product Experience: React Q&A, Ship 30 for 30, and Safe Artifacts  
+> **Status:** ✅ Complete  
+> **Immediate Target:** Milestone v0.1 Audit  
 
 ---
 
@@ -261,10 +261,11 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **P0.1 Foundation & Environment** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
 | **P0.2 Ingestion & Embeddings** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
-| **P0.3 Retrieval & Grounding Gate** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
-| **P0.4 Pi Subprocess Bridge Spike** | v0.1 | P0 | ⬜ Not Started | 0/1 | — |
-| **P0.5 Providers & Grounded Q&A** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
-| **P0.6 Evaluator UI & Test Suite** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
+| **P0.3 Retrieval & Grounding Gate** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
+| **P0.4 Pi Subprocess Bridge Spike** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
+| **P0.5 Providers & Grounded Q&A** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
+| **P0.5A Production Pi Integration** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
+| **P0.6 Evaluator UI & Artifacts** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
 | **P1.1 Ship 30 for 30 Skill** | v0.2 | P1 | ⬜ Deferred | 0/1 | — |
 | **P1.2 Artifacts & Sandboxed Viewer**| v0.2 | P1 | ⬜ Deferred | 0/2 | — |
 | **P1.3 Evaluator Polish** | v0.2 | P1 | ⬜ Deferred | 0/1 | — |
@@ -280,7 +281,7 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 | :--- | :--- | :--- | :--- |
 | P0.1 | 2026-09-14 | 2026-09-14 | ~1h |
 | P0.2 | 2026-09-14 | 2026-09-14 | ~45m |
-| P0.3 | — | — | — |
-| P0.4 | — | — | — |
-| P0.5 | — | — | — |
-| P0.6 | — | — | — |
+| P0.3 | 2026-09-14 | 2026-09-14 | ~1h |
+| P0.4 | 2026-09-14 | 2026-09-14 | ~45m |
+| P0.5 / P0.5A | 2026-09-14 | 2026-09-14 | ~1.5h |
+| P0.6 | 2026-09-14 | 2026-09-14 | ~1h |

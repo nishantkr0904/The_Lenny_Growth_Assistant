@@ -158,7 +158,10 @@ The canonical local path uses Docker Compose exclusively. No cloud API key is re
 
 ## Quick Start
 
-> **Implementation status:** The application is currently in the documentation and design phase. The commands below describe the *intended* evaluator workflow as specified in `architecture.md`. They will work once the application code is implemented.
+> **Implementation status:** Full multi-container system is implemented and verified. All services (`postgres`, `ollama`, `backend`, `frontend`) run via Docker Compose with zero cloud API keys required.
+> - **Web Workspace:** `http://localhost:3000`
+> - **FastAPI API & OpenAPI Docs:** `http://localhost:8000/docs`
+> - **Health & Status:** `http://localhost:8000/api/v1/health`
 
 ```bash
 # 1. Clone repository
@@ -171,11 +174,15 @@ cp .env.example .env
 # 3. Start all services
 docker compose up -d
 
-# 4. Run one-time transcript ingestion
-docker compose exec backend python -m scripts.ingest
+# 4. Run one-time transcript ingestion (pre-seeded with representative episodes)
+docker compose exec backend python -m scripts.ingest --limit 5
 
-# 5. Open the application
+# 5. Open the web research application
 open http://localhost:3000
+
+# 6. Run automated test suites
+docker compose exec backend pytest -v        # 80 backend & security tests
+cd frontend && npm test                     # 8 frontend Vitest component tests
 ```
 
 Setup targets under 10 minutes under documented prerequisites. Actual time varies with image and model download speeds.

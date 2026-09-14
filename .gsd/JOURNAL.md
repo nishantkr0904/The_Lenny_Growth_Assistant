@@ -280,6 +280,39 @@ Execute targeted architectural correction to put Pi Coding Agent 0.85.1 genuinel
 - Next phase is Phase P0.6: Minimal Evaluator UI & Critical Automated Test Suite.
 - Strict scope boundary preserved: Zero P0.6 React frontend or UI component code implemented.
 
+### Session: 2026-09-14 17:30 (Phase P0.6 Evaluator-Facing Product Experience: React Q&A, Ship 30 for 30, and Safe Artifacts)
+
+#### Objective
+Execute Phase P0.6: Deliver the full evaluator-facing product experience for The Lenny Growth Assistant. Build the backend artifact engine and Bleach HTML sanitization pipeline, encode the 7 Ship 30 for 30 writing principles, construct the React 18 + Vite SPA frontend with TailwindCSS, implement grounding trust UX (evidence tier badges, refusal card, interactive source drawer), integrate bare sandboxed `<iframe>` isolation (`sandbox=""`, strict CSP) with preview/source toggling, containerize the frontend in Docker Compose, and verify end-to-end via automated test suites and live browser testing.
+
+#### Accomplished
+- ✅ **Created Phase Plan:** Authored `.gsd/phases/P0.6/PLAN.md` detailing 6 implementation tasks, security requirements, and acceptance criteria.
+- ✅ **Backend Artifact Engine & Bleach Sanitization:** Implemented `backend/app/artifacts/` (`models.py`, `compiler.py`, `store.py`) and API router `backend/app/api/v1/artifacts.py` registered in `backend/app/main.py`. Added `bleach>=6.1.0` and `markdown>=3.6.0`.
+- ✅ **Ship 30 for 30 Content Transformation:** Implemented `Ship30Writer` encoding all 7 canonical principles: Grabber Hook, Clear Progression (4A framework), Skimmable Formatting with bold anchors, ~1,250 words, Actionable Takeaway checklist, Grounded Claims, and Expert Curation credibility framing.
+- ✅ **Defense-in-Depth HTML Security:** Engineered multi-layer security:
+  - Backend `sanitize_html_content()` regex + Bleach pipeline stripping `<script>`, `<style>`, `<embed>`, `<object>`, `<iframe>`, forms, `javascript:` URIs, and inline `on*` event handlers.
+  - Strict Content Security Policy meta header injected into outer HTML template: `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none';`.
+  - Frontend bare sandboxed `<iframe>` (`sandbox=""`) forcing opaque null-origin execution with zero script access.
+- ✅ **React 18 + Vite SPA Frontend:** Initialized modern frontend with TailwindCSS, Lucide React icons, and Vitest in `frontend/`. Implemented layout and components: `Header` (with dynamic provider badge querying `/api/v1/health`), `SessionSidebar`, `EvidenceIndicator` (`Strong`, `Limited`, `Contrasting`), `RefusalCard` (warm `#FEF9EF` card for `Insufficient` evidence), `CitationBadge`, `SourceDrawer` (provenance inspector), `AnswerBlock`, `Composer`, `ConversationView`, `ArtifactTypeSelector`, `SafeHtmlPreview`, `MarkdownPreview`, and `ArtifactViewer`.
+- ✅ **Unbuffered Nginx SSE Proxy & Docker Integration:** Created `frontend/Dockerfile` and `frontend/nginx.conf` with `proxy_buffering off;` and `proxy_cache off;` for immediate SSE token streaming. Added `frontend` service to `docker-compose.yml` on port 3000.
+- ✅ **Automated Tests:**
+  - Backend: added `backend/tests/test_artifacts.py` and `backend/tests/test_security_sanitization.py`. Full pytest suite: 80 passed in 3.32s.
+  - Frontend: added `frontend/src/tests/components.test.tsx`. Vitest suite: 8 passed in 890ms.
+- ✅ **Live End-to-End Browser Flow:** Conducted automated browser testing via browser subagent across all 11 user journeys (Header, ProviderBadge, Session switching, Strong Evidence, Citation Badge, SourceDrawer with quote and match score, Create Artifact, Ship 30 essay, Sandboxed iframe viewer, Source tab toggle, Quantum Physics Insufficient refusal card, New Session creation).
+
+#### Verification
+- [x] Backend test suite: 80 passed in 3.32s (`docker compose exec backend pytest -v`)
+- [x] Frontend test suite: 8 passed in 890ms (`npm test` in `frontend/`)
+- [x] Live browser E2E test passes 100% of user flows
+- [x] React SPA accessible at `http://localhost:3000` via Docker Compose
+- [x] Dynamic provider badge reflects active provider from `/api/v1/health`
+- [x] GroundingGate tiers and refusal card enforced with zero hallucinations
+- [x] SourceDrawer displays verified guest, episode, quote, and similarity match
+- [x] Ship 30 for 30 essay generated with all 7 principles encoded
+- [x] Sandboxed iframe viewer enforces bare `sandbox=""` and strict CSP
+- [x] Atomic git commits verified and working tree clean
+- [x] Phase P0.7 NOT STARTED
+
 ---
 
 *Last updated: 2026-09-14*

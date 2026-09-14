@@ -57,18 +57,19 @@
 - [x] Implement post-generation citation validator `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Phase P0.5A Architectural Correction: Production Pi Bridge Daemon & QnAOrchestrator Routing `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P0.6 Evaluator UI & Test Suite
-- [ ] Scaffold React 18 + Vite frontend with TailwindCSS `high` 🔴 — 2026-09-14
-- [ ] Build chat interface with SSE streaming and markdown rendering `high` 🔴 — 2026-09-14
-- [ ] Implement session switcher sidebar and active provider status badge `high` 🔴 — 2026-09-14
-- [ ] Implement evidence tier badges and citation cards `high` 🔴 — 2026-09-14
-- [ ] Build automated `pytest` suite for API, retrieval, grounding, and sessions `high` 🔴 — 2026-09-14
+### Phase P0.6 Evaluator UI & Safe Artifacts (Completed)
+- [x] Scaffold React 18 + Vite frontend with TailwindCSS `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Build chat interface with SSE streaming and markdown rendering `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement session switcher sidebar and active provider status badge `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement evidence tier badges, citation inspector cards, and refusal card `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement Ship 30 for 30 writing tool with 7 encoded principles `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement artifact compiler (Markdown & HTML/CSS) with Bleach sanitization `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement in-app Artifact Viewer with bare sandboxed `<iframe>` (`sandbox=""`, strict CSP) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Add raw code view toggle and copy/export actions `medium` 🟡 — 2026-09-14 ✓ 2026-09-14
+- [x] Build automated `pytest` and `vitest` test suites (80 backend + 8 frontend tests) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Live end-to-end browser verification via browser subagent `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P1 (Product Usefulness & Artifacts)
-- [ ] Implement Ship 30 for 30 writing tool with 7 encoded principles `medium` 🟡 — 2026-09-14
-- [ ] Implement artifact compiler (Markdown & HTML/CSS) `medium` 🟡 — 2026-09-14
-- [ ] Implement split-pane Artifact Viewer with sandboxed `<iframe>` and Bleach `medium` 🟡 — 2026-09-14
-- [ ] Add raw code view toggle and copy-to-clipboard `low` 🟢 — 2026-09-14
+### Milestone v0.1 Audit & P1 Tasks (Pending)
 
 ### Phase P2 (Hardening & Polish)
 - [ ] Implement OpenAI GPT-4o provider adapter as second cloud LLM `low` 🟢 — 2026-09-14

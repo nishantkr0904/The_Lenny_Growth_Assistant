@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14T16:30:00Z
+updated: 2026-09-14T18:00:00Z
 ---
 
 # Project State
@@ -7,34 +7,29 @@ updated: 2026-09-14T16:30:00Z
 ## Current Position
 
 **Milestone:** v0.1 — P0 Core Grounded Assistant  
-**Phase:** P0.5A — Targeted Architectural Correction: Production Pi Agent Integration  
+**Phase:** P0.6 — Evaluator-Facing Product Experience: React Q&A, Ship 30 for 30, and Safe Artifacts  
 **Status:** ✅ Complete  
-**Plan:** Plan P0.5 and Correction Plan P0.5A executed and verified  
+**Plan:** Plan P0.6 executed and verified  
 
 ---
 
 ## Last Action
 
-Successfully executed and verified **Phase P0.5A Targeted Architectural Correction (Production Pi Agent Integration)**:
-- Upgraded backend container to include Node.js 22 runtime and `@earendil-works/pi-coding-agent@0.85.1`.
-- Implemented production Pi bridge daemon (`backend/app/agent/bridge_daemon.mjs`) communicating over stdio using line-delimited JSON-RPC 2.0 (`execute_turn`, `stream_turn`, `ping`, `shutdown`). Redirected all console logging to stderr to guarantee zero stdout protocol corruption.
-- Registered project-local `transcript_retrieval` tool in Pi via `defineTool`, delegating to FastAPI's authoritative P0.3 `/api/v1/retrieval/search` endpoint and preserving GroundingGate decisions, scores, and chunk metadata.
-- Implemented Python bridge client (`backend/app/agent/pi_bridge.py`) with child process lifecycle management, concurrency serialization via `asyncio.Lock()`, and FastAPI lifespan termination (`backend/app/main.py`) ensuring zero orphan processes.
-- Rewired production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`): eliminated direct `self.provider.generate()` / `self.provider.stream()` calls. All turn generation and token streaming route through the Pi agent runtime.
-- Preserved existing P0.1–P0.5 contracts: bounded context, query rewriting, pgvector cosine search, deterministic GroundingGate tiers (Strong, Limited, Conflicting, Insufficient), honest refusal without citations on Insufficient, and post-generation `CitationValidator`.
-- Added 4 new tests in `backend/tests/test_pi_bridge.py`; full backend test suite passes with 70 green tests.
-- Empirically validated on live Docker stack: Scenario A (supported Ada Chen Rekhi turn), Scenario B (follow-up with pronoun resolution), Scenario C (unsupported refusal with 0 citations), Scenario D (Anthropic configuration error), and Scenario E (real-time SSE streaming).
+Successfully executed and verified **Phase P0.6 (Evaluator-Facing Product Experience)**:
+- Backend Artifact Engine & Bleach Sanitization implemented in `backend/app/artifacts/` (`models.py`, `compiler.py`, `store.py`) and API router `backend/app/api/v1/artifacts.py` registered in `backend/app/main.py`.
+- Encoded all 7 canonical Ship 30 for 30 principles in `Ship30Writer`: Grabber Hook, 4A Progression, Skimmable Formatting, ~1,250 words, Actionable Takeaway checklist, Grounded Claims, and Curating the Experts credibility framing.
+- Built defense-in-depth HTML sanitization: `bleach.clean()` strips unsafe tags/attributes/URIs, strict CSP injected into HTML5 boilerplate, and bare sandboxed `<iframe>` (`sandbox=""`) rendered on frontend with NO `allow-scripts` and NO `allow-same-origin`.
+- Built full React 18 + Vite + TypeScript frontend SPA with TailwindCSS and Lucide React icons, containerized via multi-stage Nginx Dockerfile in `docker-compose.yml` on port 3000.
+- Grounding trust UX: Header dynamic provider badge (`🟢 Ollama (llama3.1:8b)` vs `🟢 Anthropic (Claude 3.5 Sonnet)`), EvidenceIndicator badges (`Strong`, `Limited`, `Contrasting`), interactive `SourceDrawer` with verified quotes, and warm refusal card for `Insufficient` evidence with zero hallucinated citations.
+- Complete automated verification: backend pytest suite (80 passed in 3.32s) and frontend test suite (8 passed in 890ms).
+- Live browser E2E test via browser subagent verified all 11 user journeys cleanly.
 
 ---
 
 ## Next Steps
 
-1. **Phase P0.6 Planning:** Author execution plan for Phase P0.6 in `.gsd/phases/P0.6/PLAN.md`.
-2. **React 18 + Vite Frontend Scaffold:** Initialize frontend client with TailwindCSS and modern responsive layout.
-3. **Conversational Chat UI:** Build real-time streaming chat component consuming SSE endpoint (`POST /api/v1/sessions/{id}/messages`).
-4. **Session Switcher & Provider Badge:** Build session drawer and active model provider status indicator.
-5. **Evidence Badges & Citation Cards:** Render interactive grounding tier badges (`Strong`, `Limited`, `Conflicting`, `Insufficient`) and source inspector cards.
-6. **Milestone v0.1 Audit:** Verify end-to-end user experience, startup reproducibility, and all P0 acceptance criteria.
+1. **Milestone Audit / P0 Acceptance Audit**: Review all P0 requirements and acceptance criteria against working live system.
+2. **Phase P0.7 Preparation**: Do not begin implementation until explicitly directed.
 
 ---
 
@@ -49,18 +44,19 @@ Successfully executed and verified **Phase P0.5A Targeted Architectural Correcti
 | **DECISION-005** | Deterministic 4-tier Grounding Gate (`GROUNDING_LIMITED_THRESHOLD = 0.65`) | Verified in P0.3 | P0.3, P0.5 |
 | **DECISION-006** | Conversational flow order: Query Rewriting upstream of Retrieval | Accepted | P0.3, P0.5 |
 | **DECISION-007** | Container PostgreSQL communication strictly on `postgres:5432` (`DATABASE_URL`) | Verified in P0.1 | P0.1 |
-| **DECISION-008** | Dual-Origin Sandboxed `<iframe>` + Bleach sanitization for artifacts | Accepted | P1.2 |
-| **DECISION-009** | Modular Monolith FastAPI backend + React 18 / Vite frontend | Verified in P0.1 | All |
+| **DECISION-008** | Dual-Origin Sandboxed `<iframe>` (`sandbox=""`) + Bleach sanitization for artifacts | Verified in P0.6 | P0.6, P1.2 |
+| **DECISION-009** | Modular Monolith FastAPI backend + React 18 / Vite frontend | Verified in P0.6 | All |
 | **DECISION-010** | Speaker-aware semantic chunking (~600 tokens, 100 overlap) | Verified in P0.2 | P0.2 |
 | **DECISION-011** | Local-first zero-key demo default via containerized Ollama | Verified in P0.1 | P0.1, P0.6 |
 | **DECISION-012** | RFC 7807 structured problem details; zero silent model fallbacks | Verified in P0.1 | P0.1, P0.5 |
 | **DECISION-013** | GroundingGate single-episode independence (episode count is diversity metadata, not gate blocker) | Verified in P0.3 | P0.3, P0.5 |
+| **DECISION-014** | Unbuffered Nginx proxying for SSE streaming deltas (`proxy_buffering off;`) | Verified in P0.6 | P0.6 |
 
 ---
 
 ## Blockers
 
-*None. Phase P0.5 complete and verified; environment is live.*
+*None. Phase P0.6 complete and verified; environment is live.*
 
 ---
 
@@ -73,9 +69,9 @@ Successfully executed and verified **Phase P0.5A Targeted Architectural Correcti
 
 ## Session Context
 
-- Phase P0.5A architectural correction implemented and verified.
-- Containers running: `lenny_postgres` (healthy on port 5433), `lenny_ollama` (up), `lenny_backend` (up on port 8000).
-- All P0.5 and P0.5A acceptance criteria satisfied.
-- Full pytest suite: 70 passed in 2.35s.
-- Strict constraint preserved: Zero P0.6 frontend or UI code implemented.
-
+- Phase P0.6 complete and verified.
+- Containers running: `lenny_postgres` (healthy on port 5433), `lenny_ollama` (up on port 11434), `lenny_backend` (up on port 8000), `lenny_frontend` (up on port 3000).
+- All P0.6 acceptance criteria satisfied.
+- Full pytest suite: 80 passed in 3.32s.
+- Frontend test suite: 8 passed in 890ms.
+- Strict constraint preserved: Phase P0.7 NOT STARTED.
