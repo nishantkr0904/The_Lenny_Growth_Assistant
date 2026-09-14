@@ -26,12 +26,12 @@
 - [x] Implement health check endpoint `GET /api/v1/health` testing DB and Ollama `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Verify startup via `docker compose up -d` and test health endpoint `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P0.2 Ingestion & Embeddings
-- [ ] Implement transcript parser with YAML frontmatter extraction `high` 🔴 — 2026-09-14
-- [ ] Implement speaker-aware semantic chunker (~600 tokens, 100 overlap, SHA-256) `high` 🔴 — 2026-09-14
-- [ ] Implement fixed `OllamaEmbeddingProvider` (768-dim `nomic-embed-text`) `high` 🔴 — 2026-09-14
-- [ ] Implement CLI ingestion command `python -m scripts.ingest` `high` 🔴 — 2026-09-14
-- [ ] Implement admin status endpoint `GET /api/v1/ingest/status` `medium` 🟡 — 2026-09-14
+### Phase P0.2 Ingestion & Embeddings (Completed)
+- [x] Implement transcript parser with YAML frontmatter extraction `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement speaker-aware semantic chunker (~600 tokens, 100 overlap, SHA-256) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement fixed `OllamaEmbeddingProvider` (768-dim `nomic-embed-text`) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement CLI ingestion command `python -m scripts.ingest` `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement admin status endpoint `GET /api/v1/ingest/status` `medium` 🟡 — 2026-09-14 ✓ 2026-09-14
 
 ### Phase P0.3 Retrieval & Grounding Gate
 - [ ] Implement conversational query rewriter (last $N=6$ context turns) `high` 🔴 — 2026-09-14

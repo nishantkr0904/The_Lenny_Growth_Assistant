@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14T14:35:00Z
+updated: 2026-09-14T15:15:00Z
 ---
 
 # Project State
@@ -8,31 +8,32 @@ updated: 2026-09-14T14:35:00Z
 
 **Milestone:** v0.1 — P0 Core Grounded Assistant  
 **Phase:** P0.2 — Transcript Knowledge Pipeline & Ingestion  
-**Status:** Ready to Plan / Execute  
-**Plan:** P0.1 completed; awaiting Phase P0.2 planning  
+**Status:** ✅ Complete  
+**Plan:** Plan P0.2.1 executed and verified  
 
 ---
 
 ## Last Action
 
-Successfully implemented and verified **Phase P0.1 (Foundation & Environment Setup)**:
-- Generated `docker-compose.yml` with `postgres` (pgvector/pgvector:pg16), `ollama` (ollama/ollama:latest), and `backend` (FastAPI).
-- Created `.env.example`, `.env` (configured with `HOST_PORT_POSTGRES=5433` avoiding local host port collision while keeping internal `DATABASE_URL` on `postgres:5432`), and `.gitignore`.
-- Scaffolded `backend/` package (`pyproject.toml`, `Dockerfile`, `app/core/config.py`, `app/core/logging.py`, `app/db/session.py`, `app/db/init_db.py`).
-- Applied canonical PostgreSQL DDL (`app/db/schema.sql`) creating `episodes`, `transcript_chunks` with `VECTOR(768)` and HNSW index, `sessions`, `messages`, `source_references`, and `artifacts`.
-- Implemented and verified `GET /api/v1/health` testing PostgreSQL connectivity and Ollama server reachability.
-- Ran automated test suite (`pytest`) inside backend container with 7 passing tests.
-- Verified live responses via `curl -i http://localhost:8000/api/v1/health`.
+Successfully implemented and verified **Phase P0.2 (Transcript Knowledge Pipeline & Ingestion)**:
+- Parsed YAML frontmatter with directory fallback resilience and normalized transcript text (`backend/app/ingestion/parser.py`).
+- Implemented speaker-aware semantic chunker (~600 tokens, 100-token overlap, context injection) with deterministic SHA-256 content hashing (`backend/app/ingestion/chunker.py`).
+- Built decoupled `OllamaEmbeddingProvider` generating fixed 768-dimensional embeddings via `nomic-embed-text` (`backend/app/ingestion/embeddings.py`).
+- Evolved `episodes` schema with metadata columns (`description`, `video_id`, `duration_seconds`, `duration`, `view_count`, `channel`) and configured `NullPool` in `backend/app/db/session.py`.
+- Built end-to-end `IngestionPipeline` with batch embedding and idempotent database upserts (`backend/app/ingestion/pipeline.py`).
+- Built ingestion CLI `python -m scripts.ingest` and corpus status endpoint `GET /api/v1/ingest/status` (`backend/scripts/ingest.py`, `backend/app/api/v1/ingest.py`).
+- Added comprehensive unit and integration test suite (`tests/test_parser.py`, `tests/test_chunker.py`, `tests/test_embeddings.py`, `tests/test_ingestion.py`), with all 24 tests passing.
+- Verified representative ingestion in PostgreSQL (3 episodes, 109 chunks, 109 vectors of length 768) and confirmed 100% idempotency upon re-run.
 
 ---
 
 ## Next Steps
 
-1. **Phase P0.2 Execution Planning:** Author execution plan for Phase P0.2 in `.gsd/phases/P0.2/PLAN.md`.
-2. **Transcript Parser:** Implement YAML frontmatter parser and directory fallback.
-3. **Semantic Chunker:** Implement speaker-aware dialogue chunker (~600 tokens, 100 overlap, SHA-256).
-4. **Embedding Provider:** Implement fixed `OllamaEmbeddingProvider` (768-dim `nomic-embed-text`).
-5. **Ingestion Script & Status Endpoint:** Implement `python -m scripts.ingest` and `GET /api/v1/ingest/status`.
+1. **Phase P0.3 Execution Planning:** Author execution plan for Phase P0.3 in `.gsd/phases/P0.3/PLAN.md`.
+2. **Query Rewriter:** Implement conversational reference resolution over last $N=6$ context turns.
+3. **Vector Retrieval Engine:** Implement pgvector cosine similarity search (`<=>`) over indexed chunks.
+4. **Deterministic Grounding Gate:** Implement 4-tier triage (Strong $\ge 0.78$, Limited $0.65 \le S < 0.78$, Conflicting, Insufficient $< 0.65$).
+5. **Retrieval Preview Endpoint:** Implement `POST /api/v1/retrieval/preview`.
 
 ---
 

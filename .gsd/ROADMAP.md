@@ -6,9 +6,9 @@ updated: 2026-09-14T14:00:00Z
 
 # Roadmap
 
-> **Current Phase:** P0.2 — Transcript Knowledge Pipeline & Ingestion  
+> **Current Phase:** P0.3 — Vector Retrieval & Deterministic Grounding Gate  
 > **Status:** Ready to Plan / Execute  
-> **Immediate Target:** Phase P0.2  
+> **Immediate Target:** Phase P0.3  
 
 ---
 
@@ -77,19 +77,23 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ---
 
 ### Phase P0.2: Transcript Knowledge Pipeline & Ingestion
-**Status:** ⬜ Not Started  
+**Status:** ✅ Complete  
 **Objective:** Ingest Lenny's Podcast transcripts into PostgreSQL with metadata extraction, speaker-aware chunking, and 768-dim embeddings.  
 **Depends on:** Phase P0.1  
 **Requirements:** REQ-03, REQ-04, REQ-05, NFR-03  
 
-**Key Deliverables:**
-- Transcript parser extracting YAML frontmatter (title, guest, episode number, URL, date) and falling back to directory names if frontmatter is absent.
-- Speaker-aware semantic chunker (~600 tokens, 100-token overlap, SHA-256 content hashing).
-- Fixed `OllamaEmbeddingProvider` generating 768-dimensional embeddings via `nomic-embed-text`.
-- CLI ingestion command: `python -m scripts.ingest` supporting idempotent runs and upserts.
-- Admin status endpoint: `GET /api/v1/ingest/status` reporting total episodes, chunks, and index stats.
+**Plans:**
+- [x] Plan P0.2.1: Transcript Knowledge Pipeline & Ingestion (Completed 2026-09-14)
 
-**Verification:** Run ingestion on sample transcripts; inspect `episodes` and `transcript_chunks` tables in PostgreSQL; verify HNSW vector index is populated.
+**Key Deliverables:**
+- Transcript parser extracting YAML frontmatter (title, guest, episode number, URL, date) and falling back to directory names if frontmatter is absent (`backend/app/ingestion/parser.py`).
+- Speaker-aware semantic chunker (~600 tokens, 100-token overlap, SHA-256 content hashing, preamble injection) (`backend/app/ingestion/chunker.py`).
+- Fixed `OllamaEmbeddingProvider` generating 768-dimensional embeddings via `nomic-embed-text` (`backend/app/ingestion/embeddings.py`).
+- CLI ingestion command: `python -m scripts.ingest` supporting idempotent runs, limits, and dry runs (`backend/scripts/ingest.py`).
+- Admin status endpoint: `GET /api/v1/ingest/status` reporting total episodes, chunks, and index stats (`backend/app/api/v1/ingest.py`).
+- Automated tests covering parser, chunker, embeddings, pipeline, and API endpoint (`backend/tests/`).
+
+**Verification:** Ingested representative episodes; verified 109 chunks with `VECTOR(768)` in PostgreSQL; verified HNSW cosine index query; verified 100% idempotency upon re-run.
 
 ---
 
@@ -222,7 +226,7 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 | Phase | Milestone | Priority | Status | Plans | Complete |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **P0.1 Foundation & Environment** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
-| **P0.2 Ingestion & Embeddings** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
+| **P0.2 Ingestion & Embeddings** | v0.1 | P0 | ✅ Complete | 1/1 | 100% |
 | **P0.3 Retrieval & Grounding Gate** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
 | **P0.4 Pi Subprocess Bridge Spike** | v0.1 | P0 | ⬜ Not Started | 0/1 | — |
 | **P0.5 Providers & Grounded Q&A** | v0.1 | P0 | ⬜ Not Started | 0/2 | — |
@@ -241,7 +245,7 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 | Phase | Started | Completed | Duration |
 | :--- | :--- | :--- | :--- |
 | P0.1 | 2026-09-14 | 2026-09-14 | ~1h |
-| P0.2 | — | — | — |
+| P0.2 | 2026-09-14 | 2026-09-14 | ~45m |
 | P0.3 | — | — | — |
 | P0.4 | — | — | — |
 | P0.5 | — | — | — |

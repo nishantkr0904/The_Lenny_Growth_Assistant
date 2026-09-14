@@ -76,4 +76,39 @@ Execute Phase P0.1: Build multi-container Docker Compose environment, initialize
 
 ---
 
+### Session: 2026-09-14 15:15 (Phase P0.2 Transcript Knowledge Pipeline & Ingestion)
+
+#### Objective
+Execute Phase P0.2: Implement the transcript ingestion pipeline for Lenny's Podcast corpus. Build YAML frontmatter parser, text normalizer, speaker-aware semantic chunker (~600 tokens, 100-token overlap, SHA-256 hashing), fixed 768-dim Ollama embedding provider, PostgreSQL persistence pipeline, CLI runner (`python -m scripts.ingest`), status API endpoint (`GET /api/v1/ingest/status`), and automated tests.
+
+#### Accomplished
+- ✅ **Created Phase Plan:** Authored `.gsd/phases/P0.2/PLAN.md` with tasks, files, and acceptance criteria.
+- ✅ **YAML Frontmatter Parser & Text Normalizer:** Created `app/ingestion/models.py` and `app/ingestion/parser.py`. Safely extracts `title`, `guest`, `publication_date`, `source_path`, `youtube_url`, `description`, `video_id`, `duration_seconds`, `duration`, `view_count`, `channel`, and `keywords`. Implemented directory-fallback resilience when frontmatter is missing. Normalizes Unicode quotes, whitespace, and markdown headings while preserving verbatim dialogue.
+- ✅ **Speaker-Aware Semantic Chunker:** Implemented `app/ingestion/chunker.py` segmenting dialogue into speaker turns, grouping into ~600 tokens with 100-token sliding overlap, injecting metadata headers `[Episode: ... | Guest: ... | Date: ...]`, and calculating deterministic SHA-256 hashes (`source_path:chunk_index:content`).
+- ✅ **Ollama Embedding Provider:** Implemented `app/ingestion/embeddings.py` calling `http://ollama:11434/api/embeddings` with `nomic-embed-text`. Strictly validates that vector dimension equals 768.
+- ✅ **Schema Evolution & Volume Mount:** Mounted `./data:/app/data:ro` in `docker-compose.yml`. Evolved `episodes` schema with nullable metadata columns and configured `NullPool` in `session.py` to prevent event-loop conflicts in asyncpg during concurrent testing.
+- ✅ **Ingestion Pipeline & CLI:** Implemented `app/ingestion/pipeline.py` and `scripts/ingest.py` (`python -m scripts.ingest`) supporting `--data-dir`, `--limit`, `--dry-run`, and `--force`. Implemented `GET /api/v1/ingest/status` reporting corpus statistics and HNSW index readiness.
+- ✅ **Comprehensive Automated Tests:** Implemented unit and integration tests in `tests/test_parser.py`, `tests/test_chunker.py`, `tests/test_embeddings.py`, and `tests/test_ingestion.py`. All 24 tests pass in 0.62s.
+- ✅ **Empirical Verification:** Ingested 3 representative episodes (`Ada Chen Rekhi`, `Adam Fishman`, `Adam Grenier`) generating 109 chunks with 768-dim vectors in PostgreSQL. Re-running ingestion confirmed 100% idempotency (42 skipped, 0 duplicate chunks inserted).
+
+#### Verification
+- [x] `docker compose exec backend pytest -v`: 24 passed in 0.62s
+- [x] 303 transcript files discovered under `data/transcripts/episodes`
+- [x] Ingestion CLI runs cleanly: `python -m scripts.ingest --dry-run` and `--limit 3`
+- [x] `SELECT vector_dims(embedding), count(*) FROM transcript_chunks GROUP BY 1;`: 109 rows with 768 dimensions
+- [x] Re-running ingestion on ingested corpus results in 0 created, 42 skipped (100% idempotent)
+- [x] `GET /api/v1/ingest/status` returns 200 OK with `total_episodes: 3`, `total_chunks: 109`, `hnsw_index_ready: true`
+- [x] HNSW cosine similarity search (`<=>`) verified with sub-millisecond execution
+- [x] Zero P0.3 code implemented; working tree clean
+
+#### Blockers Encountered
+- None. `nomic-embed-text` was pre-pulled in Ollama container and generated embeddings at ~1.5s per batch of turns. `NullPool` resolved asyncpg test event-loop connection reuse cleanly.
+
+#### Handoff Notes
+- Phase P0.2 complete and verified.
+- Next phase is Phase P0.3: Vector Retrieval & Deterministic Grounding Gate (`QueryRewriter`, pgvector cosine retrieval, 4-tier Grounding Gate).
+- Strict scope boundary maintained: Zero P0.3 retrieval engine or Grounding Gate code implemented in P0.2.
+
+---
+
 *Last updated: 2026-09-14*

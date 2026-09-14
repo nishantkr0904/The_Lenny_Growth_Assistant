@@ -17,9 +17,9 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **REQ-01** | **Session Creation & Persistence:** Create distinct conversational sessions with unique UUIDs, storing metadata and timestamps in PostgreSQL `sessions` table. | P0 | PRD FR-1, FR-12 | P0.1 | Pending |
 | **REQ-02** | **Session Isolation:** Ensure conversations and messages are strictly isolated (`WHERE session_id = :id`) across server restarts and concurrent requests. | P0 | PRD FR-13, FR-14 | P0.1 | Pending |
-| **REQ-03** | **Transcript Ingestion:** Load transcript markdown files from `data/transcripts/`, extract YAML frontmatter (episode, guest, title, URL), and extract text. | P0 | PRD FR-7, FR-8 | P0.2 | Pending |
-| **REQ-04** | **Speaker-Aware Semantic Chunking:** Partition transcripts into ~600-token chunks with 100-token overlap, preserving speaker boundaries, episode metadata, and SHA-256 hash. | P0 | PRD FR-9, Arch §7 | P0.2 | Pending |
-| **REQ-05** | **Fixed Vector Embeddings:** Generate 768-dimensional embeddings using Ollama `nomic-embed-text` and store in PostgreSQL `transcript_chunks` with HNSW index. | P0 | Arch §3.2, PRD Q2 | P0.2 | Pending |
+| **REQ-03** | **Transcript Ingestion:** Load transcript markdown files from `data/transcripts/`, extract YAML frontmatter (episode, guest, title, URL), and extract text. | P0 | PRD FR-7, FR-8 | P0.2 | Complete |
+| **REQ-04** | **Speaker-Aware Semantic Chunking:** Partition transcripts into ~600-token chunks with 100-token overlap, preserving speaker boundaries, episode metadata, and SHA-256 hash. | P0 | PRD FR-9, Arch §7 | P0.2 | Complete |
+| **REQ-05** | **Fixed Vector Embeddings:** Generate 768-dimensional embeddings using Ollama `nomic-embed-text` and store in PostgreSQL `transcript_chunks` with HNSW index. | P0 | Arch §3.2, PRD Q2 | P0.2 | Complete |
 | **REQ-06** | **Query Rewriting & Reference Resolution:** Prior to retrieval, rewrite the user query using the session's last $N=6$ message turns to resolve pronouns and implicit references. | P0 | PRD FR-3, Arch §6.2 | P0.3 | Pending |
 | **REQ-07** | **Vector Retrieval Engine:** Perform semantic cosine similarity search (`<=>`) over indexed chunks with configurable `RETRIEVAL_TOP_K` (default 15) and metadata preservation. | P0 | PRD FR-10, Arch §8 | P0.3 | Pending |
 | **REQ-08** | **Deterministic Grounding Gate:** Triage retrieved evidence into 4 canonical tiers: Strong ($\ge 0.78$), Limited ($0.65 \le S < 0.78$), Conflicting (opposing perspectives), Insufficient ($< 0.65$). | P0 | PRD FR-5, PRD §9 | P0.3 | Pending |
@@ -70,9 +70,9 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 | :--- | :--- | :--- | :--- | :--- |
 | REQ-01 | Goal 2 | `SessionManager` + PostgreSQL | API test `POST /api/v1/sessions` | Pending |
 | REQ-02 | Goal 2 | `SessionManager` (`WHERE session_id = :id`) | Concurrency / cross-session test | Pending |
-| REQ-03 | Goal 1 | `scripts.ingest` (Frontmatter parser) | Corpus ingestion test | Pending |
-| REQ-04 | Goal 1 | `SemanticChunker` | Chunk boundary & metadata test | Pending |
-| REQ-05 | Goal 4 | `OllamaEmbeddingProvider` (768-dim) | Dimension & vector insert test | Pending |
+| REQ-03 | Goal 1 | `scripts.ingest` (Frontmatter parser) | Corpus ingestion test | Complete |
+| REQ-04 | Goal 1 | `SemanticChunker` | Chunk boundary & metadata test | Complete |
+| REQ-05 | Goal 4 | `OllamaEmbeddingProvider` (768-dim) | Dimension & vector insert test | Complete |
 | REQ-06 | Goal 2 | `QueryRewriter` | Pronoun resolution test | Pending |
 | REQ-07 | Goal 1 | `RetrievalEngine` (`<=>` pgvector) | Golden query retrieval benchmark | Pending |
 | REQ-08 | Goal 3 | `GroundingGate` (4 tiers) | Unit test against score thresholds | Pending |
