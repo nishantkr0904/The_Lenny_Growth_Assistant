@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.health import router as health_router
 from app.api.v1.ingest import router as ingest_router
+from app.api.v1.retrieval import router as retrieval_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.init_db import init_db
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     # Convenience alias for top-level /health
     app.include_router(health_router)
     app.include_router(ingest_router, prefix="/api/v1")
+    app.include_router(retrieval_router, prefix="/api/v1")
 
     @app.get("/", summary="Root index")
     async def root_index() -> dict[str, str]:
