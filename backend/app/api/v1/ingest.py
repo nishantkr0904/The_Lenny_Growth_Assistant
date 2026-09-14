@@ -1,12 +1,13 @@
 """Ingestion status and corpus statistics endpoint."""
 
 from typing import Any, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.db.session import engine
+from app.db.session import get_db
 
 router = APIRouter(prefix="/ingest", tags=["Ingestion"])
 logger = get_logger(__name__)
@@ -25,60 +26,59 @@ class IngestStatusResponse(BaseModel):
 
 
 @router.get("/status", response_model=IngestStatusResponse)
-async def get_ingest_status() -> dict[str, Any]:
+async def get_ingest_status(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """
     Return current corpus statistics from PostgreSQL and pgvector.
     Reports total episodes, chunk counts, embedded vector count, and HNSW index status.
     """
     try:
-        async with engine.connect() as conn:
-            # Episode stats
-            ep_res = await conn.execute(
-                text(
-                    """
-                    SELECT 
-                        COUNT(*), 
-                        COUNT(DISTINCT guest),
-                        MIN(publication_date),
-                        MAX(publication_date)
-                    FROM episodes;
-                    """
-                )
+        # Episode stats
+        ep_res = await db.execute(
+            text(
+                """
+                SELECT 
+                    COUNT(*), 
+                    COUNT(DISTINCT guest),
+                    MIN(publication_date),
+                    MAX(publication_date)
+                FROM episodes;
+                """
             )
-            ep_row = ep_res.fetchone()
-            total_episodes = ep_row[0] if ep_row else 0
-            unique_guests = ep_row[1] if ep_row else 0
-            earliest_date = str(ep_row[2]) if ep_row and ep_row[2] else None
-            latest_date = str(ep_row[3]) if ep_row and ep_row[3] else None
+        )
+        ep_row = ep_res.fetchone()
+        total_episodes = ep_row[0] if ep_row else 0
+        unique_guests = ep_row[1] if ep_row else 0
+        earliest_date = str(ep_row[2]) if ep_row and ep_row[2] else None
+        latest_date = str(ep_row[3]) if ep_row and ep_row[3] else None
 
-            # Chunk stats
-            chunk_res = await conn.execute(
-                text(
-                    """
-                    SELECT 
-                        COUNT(*),
-                        COUNT(embedding)
-                    FROM transcript_chunks;
-                    """
-                )
+        # Chunk stats
+        chunk_res = await db.execute(
+            text(
+                """
+                SELECT 
+                    COUNT(*),
+                    COUNT(embedding)
+                FROM transcript_chunks;
+                """
             )
-            chunk_row = chunk_res.fetchone()
-            total_chunks = chunk_row[0] if chunk_row else 0
-            chunks_with_embeddings = chunk_row[1] if chunk_row else 0
+        )
+        chunk_row = chunk_res.fetchone()
+        total_chunks = chunk_row[0] if chunk_row else 0
+        chunks_with_embeddings = chunk_row[1] if chunk_row else 0
 
-            # Check HNSW index status
-            idx_res = await conn.execute(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM pg_indexes
-                    WHERE tablename = 'transcript_chunks' 
-                      AND indexname = 'idx_chunks_embedding_hnsw';
-                    """
-                )
+        # Check HNSW index status
+        idx_res = await db.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM pg_indexes
+                WHERE tablename = 'transcript_chunks' 
+                  AND indexname = 'idx_chunks_embedding_hnsw';
+                """
             )
-            idx_count = idx_res.scalar() or 0
-            hnsw_index_ready = idx_count > 0
+        )
+        idx_count = idx_res.scalar() or 0
+        hnsw_index_ready = idx_count > 0
 
         return {
             "total_episodes": total_episodes,
