@@ -28,6 +28,8 @@ import {
 
 const RETRIEVAL_API_URL = process.env.RETRIEVAL_API_URL || "http://localhost:8000/api/v1/retrieval/search";
 
+let currentTurnToolCalls = [];
+
 export const transcriptRetrievalTool = defineTool({
 	name: "transcript_retrieval",
 	label: "Transcript Retrieval",
@@ -47,6 +49,7 @@ export const transcriptRetrievalTool = defineTool({
 	}),
 
 	async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+		currentTurnToolCalls.push({ name: "transcript_retrieval", params });
 		console.log(`\n  [TOOL CALL] transcript_retrieval query="${params.query}" (top_k=${params.top_k || 5})`);
 		const startTime = Date.now();
 
@@ -158,7 +161,7 @@ export async function runSpikeTurn(session, userPrompt) {
 	console.log(`============================================================`);
 
 	let assistantResponse = "";
-	const toolCallsMade = [];
+	currentTurnToolCalls = [];
 
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_update") {
@@ -167,11 +170,6 @@ export async function runSpikeTurn(session, userPrompt) {
 				assistantResponse += delta;
 				process.stdout.write(delta);
 			}
-		} else if (event.type === "tool_call_start") {
-			toolCallsMade.push({
-				name: event.toolName,
-				params: event.parameters,
-			});
 		}
 	});
 
@@ -181,7 +179,7 @@ export async function runSpikeTurn(session, userPrompt) {
 		return {
 			prompt: userPrompt,
 			response: assistantResponse,
-			toolCalls: toolCallsMade,
+			toolCalls: [...currentTurnToolCalls],
 		};
 	} finally {
 		unsubscribe();
