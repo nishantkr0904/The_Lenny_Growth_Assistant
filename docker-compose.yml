@@ -57,6 +57,19 @@ services:
     networks:
       - lenny_internal
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lenny_frontend
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT_FRONTEND:-3000}:3000"
+    depends_on:
+      - backend
+    networks:
+      - lenny_internal
+
 networks:
   lenny_internal:
     name: lenny_internal
