@@ -64,7 +64,8 @@ class OllamaGenerationProvider(GenerationProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            http_timeout = httpx.Timeout(connect=15.0, read=self.timeout, write=15.0, pool=15.0)
+            async with httpx.AsyncClient(timeout=http_timeout) as client:
                 response = await client.post(url, json=payload)
                 if response.status_code != 200:
                     raise ProviderConfigurationError(
@@ -72,6 +73,10 @@ class OllamaGenerationProvider(GenerationProvider):
                     )
                 data = response.json()
                 return data.get("message", {}).get("content", "")
+        except httpx.TimeoutException as exc:
+            raise ProviderConfigurationError(
+                f"Ollama generation timed out after {self.timeout}s at {self.base_url}: {exc}"
+            ) from exc
         except httpx.ConnectError as exc:
             raise ProviderConfigurationError(
                 f"Cannot connect to Ollama at {self.base_url}. Ensure container is running: {exc}"

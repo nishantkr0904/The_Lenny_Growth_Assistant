@@ -171,6 +171,7 @@ class QnAOrchestrator:
         response_text = await self.provider.generate(
             messages=llm_messages,
             system_prompt=SYSTEM_GROUNDING_PROMPT,
+            max_tokens=384,
         )
 
         # 11. Validate citations
@@ -297,7 +298,11 @@ class QnAOrchestrator:
 
         # Stream token deltas from provider
         accumulated_text = ""
-        async for token in self.provider.stream(llm_messages, system_prompt=SYSTEM_GROUNDING_PROMPT):
+        async for token in self.provider.stream(
+            llm_messages,
+            system_prompt=SYSTEM_GROUNDING_PROMPT,
+            max_tokens=384,
+        ):
             accumulated_text += token
             yield f"event: delta\ndata: {json.dumps({'text': token})}\n\n"
 

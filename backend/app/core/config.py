@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Ollama Configuration (Local Demo Default — Generation)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
-    OLLAMA_TIMEOUT_SECONDS: float = 60.0
+    OLLAMA_TIMEOUT_SECONDS: float = 180.0
 
     # Corpus Embedding (Fixed — always via Ollama nomic-embed-text at 768 dimensions)
     EMBED_MODEL: str = "nomic-embed-text"
