@@ -38,6 +38,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     logger.info("Shutting down The Lenny Growth Assistant API")
+    try:
+        from app.agent.pi_bridge import PiBridgeClient
+        await PiBridgeClient.get_instance().close()
+    except Exception as exc:
+        logger.warning("Error closing PiBridgeClient on shutdown: %s", exc)
 
 
 def create_app() -> FastAPI:
