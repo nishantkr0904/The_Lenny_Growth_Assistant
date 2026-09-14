@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14T15:25:00Z
+updated: 2026-09-14T16:00:00Z
 ---
 
 # Project State
@@ -7,31 +7,33 @@ updated: 2026-09-14T15:25:00Z
 ## Current Position
 
 **Milestone:** v0.1 — P0 Core Grounded Assistant  
-**Phase:** P0.3 — Vector Retrieval & Deterministic Grounding Gate  
+**Phase:** P0.4 — Pi Coding Agent Bridge Validation Spike  
 **Status:** ✅ Complete  
-**Plan:** Plan P0.3.1 executed and verified  
+**Plan:** Plan P0.4 executed and verified  
 
 ---
 
 ## Last Action
 
-Successfully implemented and verified **Phase P0.3 (Vector Retrieval & Deterministic Grounding Gate)**:
-- Implemented typed retrieval and evidence models with the canonical 4 tiers (`Strong`, `Limited`, `Conflicting`, `Insufficient`) in `backend/app/retrieval/models.py`.
-- Implemented deterministic query normalization boundary collapsing whitespace, normalizing quotes/Unicode, and validating non-empty input (`backend/app/retrieval/query.py`).
-- Implemented `VectorRetrievalEngine` embedding queries via Ollama `nomic-embed-text` (768-dim) and performing cosine similarity search via pgvector `<=>` operator over HNSW index with episode metadata join (`backend/app/retrieval/engine.py`).
-- Implemented deterministic `GroundingGate` enforcing canonical thresholds (Strong $\ge 0.78$, Limited $[0.65, 0.78)$, Insufficient $< 0.65$), disallowing synthesis on Insufficient, evaluating multi-guest conflict divergence, and verifying that episode count is not a mandatory condition for Strong (`backend/app/retrieval/grounding.py`).
-- Exposed FastAPI retrieval routes `POST /api/v1/retrieval/search` and `/preview` (`backend/app/api/v1/retrieval.py`).
-- Created comprehensive test suite (`backend/tests/test_retrieval.py`) with 15 unit and live integration tests; full test suite (39 tests) passing in 0.59s.
-- Empirically verified live queries against ingested corpus returning ranked chunks, correct grounding tiers, and refusal behavior on out-of-domain queries.
+Successfully executed and verified **Phase P0.4 (Pi Coding Agent Bridge Validation Spike)**:
+- Defined project-local custom retrieval tool `transcript_retrieval` in `.pi/extensions/transcript_retrieval.ts` via Pi's `defineTool` API, querying `POST /api/v1/retrieval/search` and enforcing grounding directives.
+- Implemented Python tool adapter in `backend/app/agent/retrieval_tool.py` providing `format_evidence_for_agent` and `execute_transcript_retrieval`, converting retrieval responses into structured XML with `<chunk>` citations or `<system_directive>NO_GROUNDED_EVIDENCE</system_directive>`.
+- Built comprehensive automated test suite `backend/tests/test_agent_tool.py` (5 tests); verified full backend suite (44 tests) passing green.
+- Implemented multi-turn spike execution runner in `spikes/run_pi_spike.mjs` using `@earendil-works/pi-coding-agent 0.85.1` headless SDK (`createAgentSession`, `ModelRuntime`, Ollama `llama3.1:8b`).
+- Empirically validated Turn 1 (Ada Chen Rekhi question): tool invoked (157ms), returned 4 chunks (`Limited` tier, score 0.7474), Pi synthesized grounded response with source attribution.
+- Empirically validated Turn 2 (out-of-domain quantum chromodynamics question): tool invoked (643ms), returned `Insufficient` tier (score 0.4492), Pi obeyed refusal directive without fabricating knowledge.
+- Verified clean lifecycle: `session.dispose()` invoked, process exited with code 0, 0 orphaned Node.js/Pi processes.
 
 ---
 
 ## Next Steps
 
-1. **Phase P0.4 Execution Planning:** Author execution plan for Phase P0.4 in `.gsd/phases/P0.4/PLAN.md`.
-2. **Pi Subprocess Bridge Spike:** Validate minimal FastAPI-to-Pi stdio JSON-RPC bridge spike as the first task of P0.4 before committing to full bridge architecture.
-3. **Pi Extension & Custom Retrieval Tool:** Wire `retrieval.search` tool into Pi Coding Agent session.
-4. **Agent Turn Execution:** Verify complete turn lifecycle: prompt $\to$ tool call $\to$ evidence return $\to$ grounded response.
+1. **Phase P0.5 Execution Planning:** Author execution plan for Phase P0.5 in `.gsd/phases/P0.5/PLAN.md`.
+2. **GenerationProvider Abstraction:** Implement Ollama (default local) and Anthropic Claude (P0 cloud) generation provider toggle via `.env`.
+3. **Session Management:** Implement `SessionManager` in PostgreSQL managing multi-turn conversation history and message persistence.
+4. **FastAPI-to-Pi Production Bridge:** Implement production subprocess bridge / streaming runner for FastAPI.
+5. **SSE Streaming Endpoint:** Implement `POST /api/v1/sessions/{id}/messages` with Server-Sent Events.
+6. **Post-Generation Citation Validator:** Implement citation check ensuring verbatim provenance before delivery.
 
 ---
 

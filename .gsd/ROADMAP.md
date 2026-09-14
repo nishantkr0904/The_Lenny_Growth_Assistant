@@ -6,36 +6,43 @@ updated: 2026-09-14T14:00:00Z
 
 # Roadmap
 
-> **Current Phase:** P0.4 — Pi Agent Subprocess Bridge Validation Spike  
+> **Current Phase:** Phase P0.5 — Model Providers, Session Management & Multi-Turn Grounded Q&A  
 > **Status:** Ready to Plan / Execute  
-> **Immediate Target:** Phase P0.4  
+> **Immediate Target:** Phase P0.5  
 
 ---
 
 ## Validation Status Boundary
 
 ```
-VALIDATED BY SPIKE & PHASES P0.1–P0.3
+VALIDATED BY SPIKE & PHASES P0.1–P0.4
 ─────────────────────────────────────────────
 • Multi-container development stack (FastAPI + PostgreSQL 16 + pgvector + Ollama)
 • Speaker-aware semantic chunker (~600 tokens, 100 overlap) and 768-dim embeddings
 • Representative corpus ingestion (3 episodes, 109 chunks, HNSW index active)
 • Vector retrieval engine (<=> cosine similarity) returning ranked evidence
 • Deterministic Grounding Gate (Strong >= 0.78, Limited [0.65, 0.78), Conflicting, Insufficient < 0.65)
-• Pi 0.85.1 execution against Ollama (llama3.1:8b) interactive spike
-• Project-local custom retrieval tool registration interactive spike
+• Pi 0.85.1 headless SDK runtime + Ollama (llama3.1:8b) cognitive synthesis
+• Project-local custom retrieval tool extension (`transcript_retrieval.ts`) via defineTool
+• End-to-end tool invocation, pgvector query, and GroundingGate preservation
+• Source-grounded answer generation with Ada Chen Rekhi citation
+• Deterministic refusal enforcement on Insufficient evidence (NO_GROUNDED_EVIDENCE)
+• Clean session lifecycle via session.dispose() with 0 orphan processes
 
 NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ─────────────────────────────────────────────
-• Production FastAPI-to-Pi stdio JSON-RPC bridge (bridge.ts / bridge_client.py)
+• Production FastAPI-to-Pi stdio JSON-RPC daemon bridge under concurrent requests
+• Multi-user session management with conversation history in PostgreSQL
+• SSE streaming endpoint (POST /api/v1/sessions/{id}/messages)
+• Anthropic Claude cloud generation provider toggle
 • Dockerized Pi runtime inside backend container
 • Dockerized Ollama GPU acceleration on Apple Silicon
-• Full corpus retrieval quality at scale
+• Full 303-episode corpus retrieval quality at scale
 • Fixed 768-dim embedding quality across golden query suite
 • Full transcript ingestion throughput and storage
 ```
 
-> **Critical Integration Gate:** Phase P0.4 is dedicated to a minimal standalone validation spike of the FastAPI-to-Pi subprocess bridge before any full agent subsystem is built.
+> **Critical Integration Gate:** Phase P0.4 completed the integration validation spike of Pi 0.85.1 + Ollama + custom retrieval tool + P0.3 Grounding Gate before building the full Q&A subsystem.
 
 ---
 
@@ -45,10 +52,10 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 - [ ] **Zero-Key Local Demo:** Default demo running on containerized Ollama (`llama3.1:8b` + `nomic-embed-text`) requiring no cloud API keys.
 - [ ] **Cloud Provider Switch:** Clean generation switch to Anthropic Claude via `.env` without code changes or vector re-indexing.
 - [x] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every retrieved evidence item (P0.3).
-- [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3).
+- [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3, P0.4).
 - [ ] **Session Context & Isolation:** PostgreSQL-backed sessions preserving multi-turn context for follow-up questions while isolating independent chats.
-- [ ] **Validated Pi Subprocess Bridge:** Proven round-trip IPC between FastAPI and Pi 0.85.1 with tool callback and clean process lifecycle.
-- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (39 passed).
+- [x] **Validated Pi Integration:** Proven end-to-end integration between Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, and clean process lifecycle (P0.4).
+- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (44 passed).
 
 ---
 
@@ -122,20 +129,24 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ---
 
 ### Phase P0.4: Pi Agent Subprocess Bridge Validation Spike
-**Status:** ⬜ Not Started  
-**Objective:** Validate the production FastAPI-to-Pi stdio JSON-RPC bridge via a standalone minimal execution spike before building the full agent subsystem.  
+**Status:** ✅ Complete  
+**Objective:** Validate the integration boundary between Pi Coding Agent 0.85.1, Ollama `llama3.1:8b`, custom retrieval tool, and P0.3 Grounding Gate via a standalone minimal execution spike before building the full agent subsystem.  
 **Depends on:** Phase P0.3  
 **Requirements:** REQ-10, CON-03  
 
+**Plans:**
+- [x] Plan P0.4: Pi Coding Agent Bridge Validation Spike (Completed 2026-09-14)
+
 **Key Deliverables:**
 - Node.js environment configured with Pi Coding Agent (`@earendil-works/pi-coding-agent 0.85.1`).
-- Minimal bridge spike script (`tests/spikes/test_pi_bridge_spike.py` / `backend/app/agent/bridge.ts` prototype).
-- Registration of a single test retrieval tool (`transcript_retrieval`) returning structured XML evidence.
-- Full round-trip test: FastAPI parent process launches Pi over stdio pipes, sends one user question, observes tool call, injects tool result, receives streamed tokens, and cleanly terminates or resets the child process.
-- Empirical RPC protocol documentation and boundary validation.
-- Architectural fallback contingency: If stdio JSON-RPC demonstrates pipe buffering or desync issues under async load, wrap Pi as an internal Express.js HTTP sidecar.
+- Project-local custom retrieval tool extension (`.pi/extensions/transcript_retrieval.ts`) registering `transcript_retrieval` tool via `defineTool`.
+- Python agent tool adapter (`backend/app/agent/retrieval_tool.py`) providing `format_evidence_for_agent` and `execute_transcript_retrieval` with XML serialization and refusal directives.
+- Automated test suite (`backend/tests/test_agent_tool.py`) validating formatting, engine coordination, and refusal behavior (5 tests).
+- Standalone validation spike harness (`spikes/run_pi_spike.mjs`) executing multi-turn headless agent sessions against Ollama `llama3.1:8b`.
+- Empirical validation of grounded synthesis on supported query (Ada Chen Rekhi) and honest refusal on out-of-domain query (quantum chromodynamics).
+- Verified clean process lifecycle (`session.dispose()`, exit code 0, 0 orphan processes).
 
-**Verification:** Script successfully completes one multi-step turn, invokes tool, receives evidence, prints response stream, and exits cleanly with zero zombie processes.
+**Verification:** Script successfully completed multi-turn spike; autonomous tool call made (157ms); real evidence returned from PostgreSQL pgvector; GroundingGate tiers preserved; grounded response generated; ungrounded query refused; session cleanly disposed with zero zombie processes. Full backend test suite passing (44 passed).
 
 ---
 

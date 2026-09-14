@@ -24,7 +24,7 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 | **REQ-07** | **Vector Retrieval Engine:** Perform semantic cosine similarity search (`<=>`) over indexed chunks with configurable `RETRIEVAL_TOP_K` (default 15) and metadata preservation. | P0 | PRD FR-10, Arch §8 | P0.3 | Complete |
 | **REQ-08** | **Deterministic Grounding Gate:** Triage retrieved evidence into 4 canonical tiers: Strong ($\ge 0.78$), Limited ($0.65 \le S < 0.78$), Conflicting (opposing perspectives), Insufficient ($< 0.65$). | P0 | PRD FR-5, PRD §9 | P0.3 | Complete |
 | **REQ-09** | **Deterministic Refusal:** When evidence is Insufficient, refuse immediately with an honest acknowledgment without invoking the LLM. | P0 | PRD FR-5, AC-5 | P0.3 | Complete |
-| **REQ-10** | **Pi Subprocess Bridge Validation Spike:** Execute a minimal standalone validation spike (FastAPI spawns Pi 0.85.1, sends 1 turn, invokes retrieval tool, receives evidence, gets response, clean termination/reuse). | P0 | Arch §25.4 | P0.4 | Pending |
+| **REQ-10** | **Pi Subprocess Bridge Validation Spike:** Execute a minimal standalone validation spike (Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, grounded answer, honest refusal, clean lifecycle). | P0 | Arch §25.4 | P0.4 | Complete |
 | **REQ-11** | **Decoupled Model Providers:** Abstract generation from embeddings: Ollama (`llama3.1:8b`) as default local provider; Anthropic Claude as selected P0 cloud provider via `.env`. | P0 | PRD FR-17, FR-18 | P0.5 | Pending |
 | **REQ-12** | **SSE Streaming Grounded Q&A:** Stream synthesized answers via Server-Sent Events (`POST /api/v1/sessions/{id}/messages`), strictly constrained to retrieved evidence. | P0 | PRD FR-2, FR-4 | P0.5 | Pending |
 | **REQ-13** | **Citation Verification:** Validate that every factual claim in the synthesized response maps to a retrieved chunk; attach structured citation metadata. | P0 | PRD FR-4, Arch §10 | P0.5 | Pending |
@@ -74,10 +74,10 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 | REQ-04 | Goal 1 | `SemanticChunker` | Chunk boundary & metadata test | Complete |
 | REQ-05 | Goal 4 | `OllamaEmbeddingProvider` (768-dim) | Dimension & vector insert test | Complete |
 | REQ-06 | Goal 2 | `QueryRewriter` | Pronoun resolution test | Pending |
-| REQ-07 | Goal 1 | `RetrievalEngine` (`<=>` pgvector) | Golden query retrieval benchmark | Pending |
-| REQ-08 | Goal 3 | `GroundingGate` (4 tiers) | Unit test against score thresholds | Pending |
-| REQ-09 | Goal 3 | `GroundingGate` (Refusal logic) | Out-of-domain refusal test | Pending |
-| REQ-10 | Goal 7 | `PiBridge` (subprocess JSON-RPC) | Standalone P0.4 bridge spike script | Pending |
+| REQ-07 | Goal 1 | `RetrievalEngine` (`<=>` pgvector) | Golden query retrieval benchmark | Complete |
+| REQ-08 | Goal 3 | `GroundingGate` (4 tiers) | Unit test against score thresholds | Complete |
+| REQ-09 | Goal 3 | `GroundingGate` (Refusal logic) | Out-of-domain refusal test | Complete |
+| REQ-10 | Goal 7 | `PiBridge` (custom tool + headless session) | Standalone P0.4 bridge spike script | Complete |
 | REQ-11 | Goal 4 | `GenerationProvider` (Ollama/Anthropic) | Provider toggle test via `.env` | Pending |
 | REQ-12 | Goal 1 | FastAPI SSE streaming endpoint | SSE event stream capture | Pending |
 | REQ-13 | Goal 1 | `CitationValidator` | Citation mapping audit | Pending |

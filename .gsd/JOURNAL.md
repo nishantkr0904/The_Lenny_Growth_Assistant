@@ -149,5 +149,52 @@ Execute Phase P0.3: Implement the deterministic retrieval and grounding layer ov
 
 ---
 
+### Session: 2026-09-14 16:00 (Phase P0.4 Pi Coding Agent Bridge Validation Spike Execution)
+
+#### Objective
+Execute Phase P0.4: Validate the critical integration boundary between Pi Coding Agent 0.85.1, local Ollama `llama3.1:8b`, project-local custom retrieval tool, P0.3 Grounding Gate, real PostgreSQL pgvector retrieval, grounded answer synthesis, and clean process lifecycle.
+
+#### Accomplished
+- ✅ **Created Phase Plan:** Authored `.gsd/phases/P0.4/PLAN.md` with 5 tasks, clear boundaries, and acceptance criteria.
+- ✅ **Python Retrieval Tool Adapter:** Implemented `backend/app/agent/retrieval_tool.py` defining `format_evidence_for_agent` and `execute_transcript_retrieval`. Serializes retrieval responses into XML evidence chunks with speaker, guest, episode title, publication date, similarity score, and citation identifier. Emits explicit `<system_directive>NO_GROUNDED_EVIDENCE</system_directive>` on Insufficient grounding to command honest refusal.
+- ✅ **Project-Local Pi Extension:** Created `.pi/extensions/transcript_retrieval.ts` defining `transcript_retrieval` tool using `@earendil-works/pi-coding-agent`'s `defineTool` API, querying `POST /api/v1/retrieval/search` and formatting structured evidence for agent consumption.
+- ✅ **Automated Unit & Integration Tests:** Implemented `backend/tests/test_agent_tool.py` containing 5 tests validating XML formatting, Strong/Limited/Conflicting/Insufficient directives, and engine/gate coordination. Full backend test suite passing (44 passed).
+- ✅ **Headless Spike Execution Runner:** Created `spikes/run_pi_spike.mjs` initializing `@earendil-works/pi-coding-agent 0.85.1` via `createAgentSession`, loading model `ollama/llama3.1:8b`, registering custom retrieval tool, and suppressing built-in tools (`noTools: "builtin"`).
+- ✅ **Live Turn 1 (Supported Query):**
+  - Prompt: *"According to the Lenny Podcast transcripts, what does Ada Chen Rekhi say about knowing when it is time to leave your job?"*
+  - Tool Invoked: `transcript_retrieval` with query `"Ada Chen Rekhi knowing when it is time to leave a job"` (latency 157ms).
+  - Grounding Tier: `Limited` (score 0.7474, 4 chunks returned from episode *"Finding Career Fulfillment"*).
+  - Model Response: Pi synthesized a grounded answer referencing the chunks, discussing "explore or exploit", comfort zone, self-awareness, and values, attributed directly to Ada Chen Rekhi.
+- ✅ **Live Turn 2 (Out-of-Domain Query):**
+  - Prompt: *"According to the Lenny Podcast transcripts, what is quantum chromodynamics in lattice gauge theory?"*
+  - Tool Invoked: `transcript_retrieval` (latency 643ms).
+  - Grounding Tier: `Insufficient` (score 0.4492, below 0.65 threshold).
+  - Model Response: Pi obeyed the refusal directive: *"Unfortunately, I'm unable to find any information about quantum chromodynamics in lattice gauge theory in the Lenny Podcast transcripts. It's possible that this topic is not covered in the transcripts."*
+- ✅ **Clean Lifecycle Verification:** Verified `session.dispose()`, exit code 0, and audited `ps aux` confirming zero orphaned Node.js or Pi child processes.
+
+#### Verification
+- [x] Pi Coding Agent 0.85.1 runs headlessly with Ollama `llama3.1:8b`
+- [x] Custom retrieval tool loaded and exposed to Pi
+- [x] Pi autonomously invokes `transcript_retrieval` tool
+- [x] Tool reaches existing P0.3 retrieval layer without code duplication
+- [x] Real evidence returned from PostgreSQL pgvector
+- [x] GroundingGate tiers (`Limited`, `Insufficient`) preserved
+- [x] Grounded answer generated attributing to Ada Chen Rekhi
+- [x] Honest refusal enforced on out-of-domain query
+- [x] Process exits cleanly with zero orphaned processes
+- [x] Full backend test suite passing (44 passed)
+- [x] Atomic git commits created and verified for all tasks
+
+#### Blockers Encountered
+- None.
+
+#### Handoff Notes
+- Phase P0.4 is complete and verified.
+- Next phase is Phase P0.5: Model Providers, Session Management & Multi-Turn Grounded Q&A.
+- Strict scope boundary preserved: Zero session manager, SSE streaming, Anthropic cloud provider, or UI code implemented in P0.4.
+
+---
+
 *Last updated: 2026-09-14*
+
 

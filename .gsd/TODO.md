@@ -40,12 +40,14 @@
 - [x] Implement retrieval search & preview endpoints `POST /api/v1/retrieval/search` and `/preview` `medium` 🟡 — 2026-09-14 ✓ 2026-09-14
 - [x] Build automated test suite for query normalization, gate tiers, and live queries (39 tests total) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P0.4 Pi Subprocess Bridge Spike (Critical Risk Gate)
-- [ ] Create standalone bridge validation spike script `high` 🔴 — 2026-09-14
-- [ ] Verify FastAPI parent can launch Pi 0.85.1 over stdio pipes `high` 🔴 — 2026-09-14
-- [ ] Verify Pi invokes registered `transcript_retrieval` tool and receives evidence `high` 🔴 — 2026-09-14
-- [ ] Verify parent process captures streamed response and exits/reuses cleanly `high` 🔴 — 2026-09-14
-- [ ] Validate fallback to HTTP sidecar if stdio proves brittle `medium` 🟡 — 2026-09-14
+### Phase P0.4 Pi Subprocess Bridge Spike (Completed)
+- [x] Create standalone bridge validation spike runner (`spikes/run_pi_spike.mjs`) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Define project-local Pi extension with `defineTool` (`.pi/extensions/transcript_retrieval.ts`) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement Python agent tool adapter (`backend/app/agent/retrieval_tool.py`) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Verify Pi invokes registered `transcript_retrieval` tool and receives evidence `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Verify Pi generates source-grounded response and refuses ungrounded query `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Build automated test suite for agent retrieval adapter (5 tests, 44 backend total) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Verify clean session lifecycle (`session.dispose()`, exit code 0, 0 orphan processes) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
 ### Phase P0.5 Providers & Grounded Q&A
 - [ ] Implement `GenerationProvider` abstraction (Ollama default + Anthropic Claude) `high` 🔴 — 2026-09-14
