@@ -11,8 +11,10 @@ from app.retrieval.models import (
     SourceDiversity,
 )
 from app.retrieval.query import normalize_query
+from app.retrieval.rewriter import ConversationQueryRewriter
 
 __all__ = [
+    "ConversationQueryRewriter",
     "EvidenceItem",
     "GroundingDecision",
     "GroundingGate",
