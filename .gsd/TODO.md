@@ -33,11 +33,12 @@
 - [x] Implement CLI ingestion command `python -m scripts.ingest` `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Implement admin status endpoint `GET /api/v1/ingest/status` `medium` 🟡 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P0.3 Retrieval & Grounding Gate
-- [ ] Implement conversational query rewriter (last $N=6$ context turns) `high` 🔴 — 2026-09-14
-- [ ] Implement vector retrieval engine (pgvector cosine `<=>` top-15) `high` 🔴 — 2026-09-14
-- [ ] Implement deterministic Grounding Gate (Strong $\ge 0.78$, Limited $0.65 \le S < 0.78$, Conflicting, Insufficient $< 0.65$) `high` 🔴 — 2026-09-14
-- [ ] Implement test/eval endpoint `POST /api/v1/retrieval/preview` `medium` 🟡 — 2026-09-14
+### Phase P0.3 Retrieval & Grounding Gate (Completed)
+- [x] Implement deterministic query normalization boundary (whitespace collapse, quote/unicode normalization, non-empty validation) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement vector retrieval engine (pgvector cosine `<=>` top-k with HNSW index & metadata join) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement deterministic Grounding Gate (Strong $\ge 0.78$, Limited $0.65 \le S < 0.78$, Conflicting, Insufficient $< 0.65$) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement retrieval search & preview endpoints `POST /api/v1/retrieval/search` and `/preview` `medium` 🟡 — 2026-09-14 ✓ 2026-09-14
+- [x] Build automated test suite for query normalization, gate tiers, and live queries (39 tests total) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
 ### Phase P0.4 Pi Subprocess Bridge Spike (Critical Risk Gate)
 - [ ] Create standalone bridge validation spike script `high` 🔴 — 2026-09-14

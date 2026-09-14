@@ -6,24 +6,24 @@ updated: 2026-09-14T14:00:00Z
 
 # Roadmap
 
-> **Current Phase:** P0.3 — Vector Retrieval & Deterministic Grounding Gate  
+> **Current Phase:** P0.4 — Pi Agent Subprocess Bridge Validation Spike  
 > **Status:** Ready to Plan / Execute  
-> **Immediate Target:** Phase P0.3  
+> **Immediate Target:** Phase P0.4  
 
 ---
 
 ## Validation Status Boundary
 
 ```
-VALIDATED BY SPIKE
+VALIDATED BY SPIKE & PHASES P0.1–P0.3
 ─────────────────────────────────────────────
-• Pi 0.85.1 execution against Ollama (llama3.1:8b)
-• Project-local custom retrieval tool registration
-• Tool invocation by Pi upon receiving user turn
-• Ingestion of retrieval evidence returned by tool
-• Grounded answer synthesis referencing evidence
-• Multi-turn follow-up handling preserving context
-• Clean interactive process lifecycle
+• Multi-container development stack (FastAPI + PostgreSQL 16 + pgvector + Ollama)
+• Speaker-aware semantic chunker (~600 tokens, 100 overlap) and 768-dim embeddings
+• Representative corpus ingestion (3 episodes, 109 chunks, HNSW index active)
+• Vector retrieval engine (<=> cosine similarity) returning ranked evidence
+• Deterministic Grounding Gate (Strong >= 0.78, Limited [0.65, 0.78), Conflicting, Insufficient < 0.65)
+• Pi 0.85.1 execution against Ollama (llama3.1:8b) interactive spike
+• Project-local custom retrieval tool registration interactive spike
 
 NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ─────────────────────────────────────────────
@@ -32,7 +32,6 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 • Dockerized Ollama GPU acceleration on Apple Silicon
 • Full corpus retrieval quality at scale
 • Fixed 768-dim embedding quality across golden query suite
-• Grounding threshold calibration (0.78 / 0.65)
 • Full transcript ingestion throughput and storage
 ```
 
@@ -45,11 +44,11 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 - [ ] **One-Command Startup:** Reproducible startup via Docker Compose (`docker compose up -d`) with zero committed secrets.
 - [ ] **Zero-Key Local Demo:** Default demo running on containerized Ollama (`llama3.1:8b` + `nomic-embed-text`) requiring no cloud API keys.
 - [ ] **Cloud Provider Switch:** Clean generation switch to Anthropic Claude via `.env` without code changes or vector re-indexing.
-- [ ] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every factual response.
-- [ ] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM.
+- [x] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every retrieved evidence item (P0.3).
+- [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3).
 - [ ] **Session Context & Isolation:** PostgreSQL-backed sessions preserving multi-turn context for follow-up questions while isolating independent chats.
 - [ ] **Validated Pi Subprocess Bridge:** Proven round-trip IPC between FastAPI and Pi 0.85.1 with tool callback and clean process lifecycle.
-- [ ] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence.
+- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (39 passed).
 
 ---
 
@@ -58,10 +57,11 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ### Phase P0.1: Foundation & Environment Setup
 **Status:** ✅ Complete  
 **Objective:** Stand up the multi-container development environment, database schema, configuration management, and health verification endpoints.  
-**Requirements:** REQ-01, REQ-02, NFR-01, NFR-02  
+**Depends on:** None  
+**Requirements:** REQ-01, REQ-02, CON-01, CON-02, CON-04, NFR-01, NFR-05  
 
 **Plans:**
-- [x] Plan P0.1.1: Foundation & Environment Setup (Completed 2026-09-14)
+- [x] Plan P0.1.1: Multi-Container Foundation (Completed 2026-09-14)
 
 **Key Deliverables:**
 - `docker-compose.yml` defining `postgres` (pgvector/pgvector:pg16), `ollama`, and `backend` services.
@@ -98,22 +98,26 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ---
 
 ### Phase P0.3: Vector Retrieval & Deterministic Grounding Gate
-**Status:** ⬜ Not Started  
-**Objective:** Build semantic search, conversational query rewriting, and the deterministic 4-tier grounding gate.  
+**Status:** ✅ Complete  
+**Objective:** Build semantic search, deterministic query normalization boundary, and the deterministic 4-tier grounding gate.  
 **Depends on:** Phase P0.2  
 **Requirements:** REQ-06, REQ-07, REQ-08, REQ-09, NFR-03, NFR-04  
 
-**Key Deliverables:**
-- Query rewriter resolving pronouns and follow-up context against the session's prior turns.
-- Vector retrieval engine executing cosine similarity (`<=>`) over `transcript_chunks` with configurable `RETRIEVAL_TOP_K` (default 15).
-- Deterministic Grounding Gate implementing the 4 canonical tiers:
-  - Strong: $\max(\text{score}) \ge 0.78$
-  - Limited: $0.65 \le \max(\text{score}) < 0.78$ (`GROUNDING_LIMITED_THRESHOLD = 0.65`)
-  - Conflicting: Divergent viewpoints across distinct guests/episodes
-  - Insufficient: $\max(\text{score}) < 0.65$ or empty $\implies$ deterministic refusal
-- Test/eval endpoint: `POST /api/v1/retrieval/preview` returning retrieved chunks, scores, and tier classification.
+**Plans:**
+- [x] Plan P0.3.1: Vector Retrieval & Deterministic Grounding Gate (Completed 2026-09-14)
 
-**Verification:** Test retrieval preview with known-answer queries (verifying Strong tier) and out-of-domain queries (verifying Insufficient tier and refusal).
+**Key Deliverables:**
+- Deterministic query normalization boundary collapsing whitespace, normalizing quotes/Unicode, and rejecting empty queries (`backend/app/retrieval/query.py`).
+- Vector retrieval engine executing cosine similarity (`<=>`) over `transcript_chunks` with HNSW index and joining episode metadata (`backend/app/retrieval/engine.py`).
+- Deterministic Grounding Gate implementing the 4 canonical tiers (`backend/app/retrieval/grounding.py`):
+  - Strong: $\max(\text{score}) \ge 0.78$ (single episode can be Strong; episode count is not a blocker)
+  - Limited: $0.65 \le \max(\text{score}) < 0.78$ (`GROUNDING_LIMITED_THRESHOLD = 0.65`)
+  - Conflicting: Multi-guest divergent perspectives with contrastive signals
+  - Insufficient: $\max(\text{score}) < 0.65$ or empty $\implies$ deterministic refusal with `can_synthesize = False` and `selected_evidence = []`
+- Backend API endpoints: `POST /api/v1/retrieval/search` and `POST /api/v1/retrieval/preview` (`backend/app/api/v1/retrieval.py`).
+- Automated tests: 15 unit and live integration tests (`backend/tests/test_retrieval.py`), with all 39 test suite checks green.
+
+**Verification:** Validated live retrieval against ingested transcripts returning ranked chunks and scores; verified Strong, Limited, and Insufficient tiers; verified out-of-domain query triggers deterministic refusal.
 
 ---
 

@@ -111,4 +111,43 @@ Execute Phase P0.2: Implement the transcript ingestion pipeline for Lenny's Podc
 
 ---
 
+### Session: 2026-09-14 15:30 (Phase P0.3 Vector Retrieval & Deterministic Grounding Gate)
+
+#### Objective
+Execute Phase P0.3: Implement the deterministic retrieval and grounding layer over the transcript corpus. Build query normalization boundary, vector retrieval engine over pgvector (`<=>` cosine distance with HNSW index and episode metadata join), deterministic Grounding Gate implementing canonical 4-tier taxonomy (`Strong`, `Limited`, `Conflicting`, `Insufficient`) with empirical thresholds (0.78 / 0.65), FastAPI retrieval endpoints (`POST /api/v1/retrieval/search` and `/preview`), comprehensive unit and live integration tests, and empirical verification.
+
+#### Accomplished
+- ✅ **Created Phase Plan:** Authored `.gsd/phases/P0.3/PLAN.md` with XML tasks, file paths, and acceptance criteria.
+- ✅ **Typed Contracts & Query Normalization:** Created `backend/app/retrieval/models.py` defining `EvidenceItem`, `GroundingTier` (strictly `Strong`, `Limited`, `Conflicting`, `Insufficient`), `SourceDiversity`, `GroundingDecision`, `RetrievalRequest`, and `RetrievalResponse`. Created `backend/app/retrieval/query.py` collapsing whitespace, normalizing quotes/Unicode, and rejecting empty queries with `ValueError`.
+- ✅ **Vector Retrieval Engine:** Created `backend/app/retrieval/engine.py` embedding queries via Ollama `nomic-embed-text` (768-dim), querying PostgreSQL using `1 - (c.embedding <=> :query_vector) AS similarity_score`, ordering via `c.embedding <=> :query_vector ASC` to leverage the HNSW index directly, joining episode metadata, and generating clean substantive excerpts.
+- ✅ **Deterministic Grounding Gate:** Created `backend/app/retrieval/grounding.py` evaluating top similarity score against `GROUNDING_STRONG_THRESHOLD = 0.78` and `GROUNDING_LIMITED_THRESHOLD = 0.65`. Sets `can_synthesize = False` and `selected_evidence = []` for Insufficient tier (< 0.65 or empty). Implemented heuristic conflict detection evaluating whether qualifying evidence chunks (score >= 0.78) originate from $\ge 2$ distinct guests and contain contrastive lexical signals. Enforced the invariant that episode count is a diversity signal and not a mandatory requirement for Strong tier.
+- ✅ **FastAPI Retrieval Routes:** Created `backend/app/api/v1/retrieval.py` with `POST /api/v1/retrieval/search` and `/preview` endpoints, registered under `/api/v1` in `backend/app/main.py`.
+- ✅ **Comprehensive Automated Tests:** Created `backend/tests/test_retrieval.py` with 15 tests covering query normalization, gate tiers, episode count independence, Insufficient refusal, conflict detection, engine mappings, and live queries against ingested transcripts. All 39 tests in the repository pass in 0.59s.
+- ✅ **Empirical Live Verification:** Verified live search against the 3 ingested episodes:
+  - Strong tier verified: `query="Feeling stuck? Here's how to know when it's time to leave your job | Ada Chen Rekhi"` $\to$ score 0.8628, Strong tier, `can_synthesize=True`.
+  - Limited tier verified: `query="Feeling stuck? Here is how to know when it is time to leave your job"` $\to$ score 0.7510, Limited tier, `can_synthesize=True`.
+  - Insufficient tier verified: `query="quantum chromodynamics gluon plasma hadronization in lattice gauge theory"` $\to$ score < 0.65, Insufficient tier, `can_synthesize=False`, `selected_evidence=[]`.
+
+#### Verification
+- [x] Full test suite: `docker compose exec backend pytest -v` passes all 39 tests in 0.59s
+- [x] Query normalization rejects empty queries with HTTP 422
+- [x] pgvector cosine similarity search (`<=>`) uses HNSW index and returns ranked chunks
+- [x] Strong threshold (0.78), Limited threshold (0.65), and Insufficient behavior verified
+- [x] Episode count is NOT required for Strong tier
+- [x] Conflicting perspectives detected across distinct guests without an LLM
+- [x] `POST /api/v1/retrieval/search` and `/preview` verified live via curl
+- [x] Zero Pi agent or LLM synthesis code implemented
+- [x] Atomic git commits created and verified for all tasks
+
+#### Blockers Encountered
+- None.
+
+#### Handoff Notes
+- Phase P0.3 is complete and verified.
+- Next phase is Phase P0.4: Pi Agent Subprocess Bridge Validation Spike.
+- Strict scope boundary preserved: Zero Pi agent code, LLM synthesis, or frontend code implemented in P0.3.
+
+---
+
 *Last updated: 2026-09-14*
+
