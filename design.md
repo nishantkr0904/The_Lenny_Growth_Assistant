@@ -34,7 +34,7 @@ The most important UX problem is not making the AI feel magical. It is making th
 This means:
 - **Source grounding is visible** without being visually noisy.
 - **Limitations are honest** — the UI never encourages the model to fabricate.
-- **Evidence quality is communicated** — strong evidence, weak evidence, and insufficient evidence are visually distinct states, not hidden metadata.
+- **Evidence quality is communicated** — strong evidence, limited evidence, conflicting perspectives, and insufficient evidence are visually distinct states, not hidden metadata.
 - **Failures are specific** — "I couldn't find enough evidence" is fundamentally different from "something went wrong."
 
 ### Research Tool, Not Content Generator
@@ -170,7 +170,7 @@ The Lenny Growth Assistant
 │   └── Source Attribution Badge
 │
 └── System Status (Ambient Surface)
-    ├── Provider Badge (Ollama / Anthropic / OpenAI)
+    ├── Provider Badge (Ollama / Anthropic / OpenAI [P2])
     └── Health Indicator
 ```
 

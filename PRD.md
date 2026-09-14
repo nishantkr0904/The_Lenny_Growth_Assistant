@@ -303,11 +303,11 @@ All metrics below are **targets for the take-home scope**. We do not claim produ
 **Rejected alternative:** Anthropic Claude Agent SDK — would more tightly couple the agent layer to Anthropic's model ecosystem, which conflicts with our requirement for configurable providers.
 
 **FR-17:** The system supports at least three provider configurations:
-1. **Ollama (local)** — mandatory for the submitted demo. Runs a locally available model (e.g., Llama 3, Mistral, or similar) that works comfortably on consumer hardware.
-2. **Anthropic Claude (cloud)** — available as an alternative provider when API keys are configured.
-3. **OpenAI (cloud)** — available as an additional alternative provider.
+1. **Ollama (local)** — mandatory for the submitted demo. Runs a locally available model (e.g., Llama 3, Mistral, or similar) that works comfortably on consumer hardware (P0 default).
+2. **Anthropic Claude (cloud)** — selected P0 cloud provider when API keys are configured.
+3. **OpenAI (cloud)** — conceptual P2 second-cloud extension.
 
-**Assumption:** At minimum one cloud provider (Anthropic Claude or OpenAI) must be fully integrated. The second is a stretch goal. Both should be configurable via environment variables.
+**Assumption:** At minimum one cloud provider (Anthropic Claude is selected for P0) must be fully integrated. The second (OpenAI) is a P2 extension. Both are configurable via environment variables without code changes.
 
 **FR-18:** The active provider is selected through environment configuration (e.g., `LLM_PROVIDER=ollama` or `LLM_PROVIDER=anthropic`). Switching providers requires only changing the configuration — no application code changes.
 
@@ -523,7 +523,7 @@ These assumptions are explicitly labeled because the client brief does not fully
 | A3 | The evaluator's machine can run Ollama with a 7-8B parameter model (e.g., Llama 3 8B, Mistral 7B). | If the evaluator's hardware is too constrained, the local demo may be unusable. | Document hardware recommendations; ensure the cloud path is a clear fallback. |
 | A4 | Transcript markdown files in the repository follow a consistent format with YAML frontmatter containing episode metadata (title, guest, topics). | If format is inconsistent, the ingestion pipeline may fail to extract metadata. | Build ingestion with defensive parsing; handle missing metadata gracefully. |
 | A5 | Users ask questions that can be reasonably answered from podcast transcripts — not highly technical implementation questions or questions requiring real-time data. | If users expect the assistant to answer implementation questions (e.g., "write me a SQL query"), they will be disappointed. | Clear product positioning and onboarding copy set expectations. |
-| A6 | One cloud LLM provider (Anthropic Claude or OpenAI) is sufficient to satisfy the assignment requirement. We implement at least one fully; the second is a stretch goal. | Minimal risk — the assignment says "at least one." | Implement the provider abstraction to make adding a second provider straightforward. |
+| A6 | One cloud LLM provider (Anthropic Claude selected for P0; OpenAI as P2 extension) is sufficient to satisfy the assignment requirement. | Minimal risk — the assignment says "at least one." | Implement the provider abstraction to make adding a second provider straightforward. |
 | A7 | Ship 30 for 30 writing principles can be reliably encoded in a structured skill/tool definition rather than requiring model fine-tuning. | If the model consistently fails to follow the writing principles via prompting, output quality will suffer. | Provide explicit structural guidance (headings, word count targets, required elements) rather than relying on style mimicry. |
 | A8 | PostgreSQL running in Docker Compose is sufficient for the evaluation. Hosted PostgreSQL (Supabase, Railway) is not required. | If the evaluator expects a hosted database, they may be confused. | Document the decision rationale; note hosted as a future option. |
 
@@ -893,8 +893,8 @@ These phases are organized around product capability and risk reduction, not tec
 
 **Capabilities:**
 - Pi Coding Agent integration with tool definitions
-- Ollama provider (default)
-- Cloud provider (Anthropic Claude or OpenAI) — at least one
+- Ollama provider (default local)
+- Cloud provider (Anthropic Claude as P0 cloud provider; OpenAI as P2 extension)
 - Provider switching via environment configuration
 - System prompt with grounding instructions
 - Provider visibility in status/config
@@ -1010,7 +1010,7 @@ These are questions that could influence implementation but do not need to be re
 | Q2 | What embedding model should we use for vector indexing? | `nomic-embed-text` (768 dimensions) via Ollama — fixed for all generation providers; resolved in architecture.md §3.2 A-4 | Resolved |
 | Q3 | Should the vector store be a dedicated system (e.g., ChromaDB, pgvector) or an in-memory solution? | pgvector extension for PostgreSQL (single database dependency) | Phase 2, during architecture design |
 | Q4 | How should we handle transcripts that lack YAML frontmatter? | Fall back to directory-name parsing for guest name; mark metadata as incomplete | Phase 2, during ingestion |
-| Q5 | Should the cloud provider integration support both Anthropic AND OpenAI, or just one? | At least one fully integrated; second is a stretch goal | Phase 3 |
+| Q5 | Should the cloud provider integration support both Anthropic AND OpenAI, or just one? | Anthropic Claude is the selected P0 cloud provider; OpenAI is a P2 extension | Phase 3 |
 | Q6 | What chunk size and overlap work best for conversational transcripts? | ~600-token chunks, 100-token overlap (refined in architecture.md §7; validation against 400-token alternative planned in §25.2) | Resolved — see architecture.md |
 | Q7 | Should the frontend be a separate React/Next.js application or server-rendered? | Separate frontend (React/Vite) communicating with the FastAPI backend via API | Phase 1, during project setup |
 

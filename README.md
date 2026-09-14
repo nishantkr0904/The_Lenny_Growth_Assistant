@@ -86,6 +86,8 @@ graph TD
 
 **Pi Coding Agent** serves as the cognitive core — a tool-equipped agent invoked via an IPC/RPC bridge from the FastAPI backend. Pi executes bounded tools (`transcript_retrieval`, `ship30_writer`, `artifact_compiler`) against validated evidence. It does not have unbounded access to general knowledge.
 
+> **Validation Status:** Pi 0.85.1 running with Ollama (`llama3.1:8b`) and a custom local retrieval tool has been validated at the interactive extension level. The production FastAPI-to-Pi stdio JSON-RPC bridge is an implementation-risk item to be validated as a minimal bridge spike before full agent assembly.
+
 **Provider separation** is strict:
 
 ```
