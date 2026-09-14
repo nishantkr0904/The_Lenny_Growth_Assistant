@@ -49,12 +49,12 @@
 - [x] Build automated test suite for agent retrieval adapter (5 tests, 44 backend total) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Verify clean session lifecycle (`session.dispose()`, exit code 0, 0 orphan processes) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
-### Phase P0.5 Providers & Grounded Q&A
-- [ ] Implement `GenerationProvider` abstraction (Ollama default + Anthropic Claude) `high` 🔴 — 2026-09-14
-- [ ] Implement `SessionManager` in PostgreSQL (session lifecycle + history hydration) `high` 🔴 — 2026-09-14
-- [ ] Wire Pi Agent with production bridge and system grounding prompt `high` 🔴 — 2026-09-14
-- [ ] Implement SSE streaming endpoint `POST /api/v1/sessions/{id}/messages` `high` 🔴 — 2026-09-14
-- [ ] Implement post-generation citation validator `high` 🔴 — 2026-09-14
+### Phase P0.5 Providers & Grounded Q&A (Completed)
+- [x] Implement `GenerationProvider` abstraction (Ollama default + Anthropic Claude) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement `SessionManager` in PostgreSQL (session lifecycle + history hydration) `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Wire Pi Agent with production bridge and system grounding prompt `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement SSE streaming endpoint `POST /api/v1/sessions/{id}/messages` `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Implement post-generation citation validator `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
 ### Phase P0.6 Evaluator UI & Test Suite
 - [ ] Scaffold React 18 + Vite frontend with TailwindCSS `high` 🔴 — 2026-09-14

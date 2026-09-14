@@ -15,19 +15,19 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 
 | ID | Requirement | Priority | Source | Phase | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **REQ-01** | **Session Creation & Persistence:** Create distinct conversational sessions with unique UUIDs, storing metadata and timestamps in PostgreSQL `sessions` table. | P0 | PRD FR-1, FR-12 | P0.1 | Pending |
-| **REQ-02** | **Session Isolation:** Ensure conversations and messages are strictly isolated (`WHERE session_id = :id`) across server restarts and concurrent requests. | P0 | PRD FR-13, FR-14 | P0.1 | Pending |
+| **REQ-01** | **Session Creation & Persistence:** Create distinct conversational sessions with unique UUIDs, storing metadata and timestamps in PostgreSQL `sessions` table. | P0 | PRD FR-1, FR-12 | P0.1 / P0.5 | Complete |
+| **REQ-02** | **Session Isolation:** Ensure conversations and messages are strictly isolated (`WHERE session_id = :id`) across server restarts and concurrent requests. | P0 | PRD FR-13, FR-14 | P0.1 / P0.5 | Complete |
 | **REQ-03** | **Transcript Ingestion:** Load transcript markdown files from `data/transcripts/`, extract YAML frontmatter (episode, guest, title, URL), and extract text. | P0 | PRD FR-7, FR-8 | P0.2 | Complete |
 | **REQ-04** | **Speaker-Aware Semantic Chunking:** Partition transcripts into ~600-token chunks with 100-token overlap, preserving speaker boundaries, episode metadata, and SHA-256 hash. | P0 | PRD FR-9, Arch §7 | P0.2 | Complete |
 | **REQ-05** | **Fixed Vector Embeddings:** Generate 768-dimensional embeddings using Ollama `nomic-embed-text` and store in PostgreSQL `transcript_chunks` with HNSW index. | P0 | Arch §3.2, PRD Q2 | P0.2 | Complete |
-| **REQ-06** | **Query Rewriting & Reference Resolution:** Prior to retrieval, rewrite the user query using the session's last $N=6$ message turns to resolve pronouns and implicit references. | P0 | PRD FR-3, Arch §6.2 | P0.3 / P0.5 | In Progress (Normalization Boundary Complete) |
+| **REQ-06** | **Query Rewriting & Reference Resolution:** Prior to retrieval, rewrite the user query using the session's last $N=6$ message turns to resolve pronouns and implicit references. | P0 | PRD FR-3, Arch §6.2 | P0.5 | Complete |
 | **REQ-07** | **Vector Retrieval Engine:** Perform semantic cosine similarity search (`<=>`) over indexed chunks with configurable `RETRIEVAL_TOP_K` (default 15) and metadata preservation. | P0 | PRD FR-10, Arch §8 | P0.3 | Complete |
 | **REQ-08** | **Deterministic Grounding Gate:** Triage retrieved evidence into 4 canonical tiers: Strong ($\ge 0.78$), Limited ($0.65 \le S < 0.78$), Conflicting (opposing perspectives), Insufficient ($< 0.65$). | P0 | PRD FR-5, PRD §9 | P0.3 | Complete |
 | **REQ-09** | **Deterministic Refusal:** When evidence is Insufficient, refuse immediately with an honest acknowledgment without invoking the LLM. | P0 | PRD FR-5, AC-5 | P0.3 | Complete |
 | **REQ-10** | **Pi Subprocess Bridge Validation Spike:** Execute a minimal standalone validation spike (Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, grounded answer, honest refusal, clean lifecycle). | P0 | Arch §25.4 | P0.4 | Complete |
-| **REQ-11** | **Decoupled Model Providers:** Abstract generation from embeddings: Ollama (`llama3.1:8b`) as default local provider; Anthropic Claude as selected P0 cloud provider via `.env`. | P0 | PRD FR-17, FR-18 | P0.5 | Pending |
-| **REQ-12** | **SSE Streaming Grounded Q&A:** Stream synthesized answers via Server-Sent Events (`POST /api/v1/sessions/{id}/messages`), strictly constrained to retrieved evidence. | P0 | PRD FR-2, FR-4 | P0.5 | Pending |
-| **REQ-13** | **Citation Verification:** Validate that every factual claim in the synthesized response maps to a retrieved chunk; attach structured citation metadata. | P0 | PRD FR-4, Arch §10 | P0.5 | Pending |
+| **REQ-11** | **Decoupled Model Providers:** Abstract generation from embeddings: Ollama (`llama3.1:8b`) as default local provider; Anthropic Claude as selected P0 cloud provider via `.env`. | P0 | PRD FR-17, FR-18 | P0.5 | Complete |
+| **REQ-12** | **SSE Streaming Grounded Q&A:** Stream synthesized answers via Server-Sent Events (`POST /api/v1/sessions/{id}/messages`), strictly constrained to retrieved evidence. | P0 | PRD FR-2, FR-4 | P0.5 | Complete |
+| **REQ-13** | **Citation Verification:** Validate that every factual claim in the synthesized response maps to a retrieved chunk; attach structured citation metadata. | P0 | PRD FR-4, Arch §10 | P0.5 | Complete |
 | **REQ-14** | **Evaluator UI & Status:** Provide a React 18 + Vite chat interface displaying active provider badge, session switcher, streaming responses, evidence tier badges, and citation cards. | P0 | PRD FR-19, Design §3 | P0.6 | Pending |
 | **REQ-15** | **Automated Test Suite:** Comprehensive `pytest` test suite validating health endpoints, ingestion, retrieval, grounding gate, provider switching, and session isolation. | P0 | PRD AC-25, Assign §6 | P0.6 | Pending |
 | **REQ-16** | **Ship 30 for 30 Content Writing Skill:** Generate ~1,250-word structured essays encoding 7 core principles (hook, narrative progression, skimmable formatting, takeaway, grounded claims). | P1 | PRD FR-21, FR-22 | P1.1 | Deferred |
@@ -68,19 +68,19 @@ Formal requirements derived from `SPEC.md`, `PRD.md`, `architecture.md`, `design
 
 | Requirement | SPEC Goal | Architecture Component | Verification Method | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| REQ-01 | Goal 2 | `SessionManager` + PostgreSQL | API test `POST /api/v1/sessions` | Pending |
-| REQ-02 | Goal 2 | `SessionManager` (`WHERE session_id = :id`) | Concurrency / cross-session test | Pending |
+| REQ-01 | Goal 2 | `SessionManager` + PostgreSQL | API test `POST /api/v1/sessions` | Complete |
+| REQ-02 | Goal 2 | `SessionManager` (`WHERE session_id = :id`) | Concurrency / cross-session test | Complete |
 | REQ-03 | Goal 1 | `scripts.ingest` (Frontmatter parser) | Corpus ingestion test | Complete |
 | REQ-04 | Goal 1 | `SemanticChunker` | Chunk boundary & metadata test | Complete |
 | REQ-05 | Goal 4 | `OllamaEmbeddingProvider` (768-dim) | Dimension & vector insert test | Complete |
-| REQ-06 | Goal 2 | `QueryRewriter` | Pronoun resolution test | Pending |
+| REQ-06 | Goal 2 | `QueryRewriter` | Pronoun resolution test | Complete |
 | REQ-07 | Goal 1 | `RetrievalEngine` (`<=>` pgvector) | Golden query retrieval benchmark | Complete |
 | REQ-08 | Goal 3 | `GroundingGate` (4 tiers) | Unit test against score thresholds | Complete |
 | REQ-09 | Goal 3 | `GroundingGate` (Refusal logic) | Out-of-domain refusal test | Complete |
 | REQ-10 | Goal 7 | `PiBridge` (custom tool + headless session) | Standalone P0.4 bridge spike script | Complete |
-| REQ-11 | Goal 4 | `GenerationProvider` (Ollama/Anthropic) | Provider toggle test via `.env` | Pending |
-| REQ-12 | Goal 1 | FastAPI SSE streaming endpoint | SSE event stream capture | Pending |
-| REQ-13 | Goal 1 | `CitationValidator` | Citation mapping audit | Pending |
+| REQ-11 | Goal 4 | `GenerationProvider` (Ollama/Anthropic) | Provider toggle test via `.env` | Complete |
+| REQ-12 | Goal 1 | FastAPI SSE streaming endpoint | SSE event stream capture | Complete |
+| REQ-13 | Goal 1 | `CitationValidator` | Citation mapping audit | Complete |
 | REQ-14 | Goal 7 | React 18 + Vite Frontend | Visual check & provider badge | Pending |
 | REQ-15 | Goal 7 | Automated test suite | `pytest` test runner | Pending |
 | REQ-16 | Goal 5 | `ship30_writer` Pi Extension [P1] | 1,250-word essay audit | Deferred |

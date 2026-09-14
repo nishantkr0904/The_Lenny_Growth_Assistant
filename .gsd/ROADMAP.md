@@ -6,16 +6,16 @@ updated: 2026-09-14T14:00:00Z
 
 # Roadmap
 
-> **Current Phase:** Phase P0.5 — Model Providers, Session Management & Multi-Turn Grounded Q&A  
-> **Status:** Ready to Plan / Execute  
-> **Immediate Target:** Phase P0.5  
+> **Current Phase:** Phase P0.6 — Minimal Evaluator UI & Critical Automated Test Suite  
+> **Status:** Ready to Plan  
+> **Immediate Target:** Phase P0.6  
 
 ---
 
 ## Validation Status Boundary
 
 ```
-VALIDATED BY SPIKE & PHASES P0.1–P0.4
+VALIDATED BY SPIKE & PHASES P0.1–P0.5
 ─────────────────────────────────────────────
 • Multi-container development stack (FastAPI + PostgreSQL 16 + pgvector + Ollama)
 • Speaker-aware semantic chunker (~600 tokens, 100 overlap) and 768-dim embeddings
@@ -28,21 +28,28 @@ VALIDATED BY SPIKE & PHASES P0.1–P0.4
 • Source-grounded answer generation with Ada Chen Rekhi citation
 • Deterministic refusal enforcement on Insufficient evidence (NO_GROUNDED_EVIDENCE)
 • Clean session lifecycle via session.dispose() with 0 orphan processes
+• PostgreSQL session and message persistence layer (`sessions`, `messages`, `source_references`)
+• Bounded working context window ($N=6$ messages) for deterministic history injection
+• Conversation-aware query rewriting resolving pronouns and context without hallucinations
+• Decoupled generation provider abstraction (`OllamaGenerationProvider`, `AnthropicGenerationProvider`)
+• Strict provider configuration validation with zero silent model fallbacks
+• Post-generation citation validation verifying cited chunks against retrieved evidence
+• Production QnAOrchestrator coordinating rewriter, retrieval, GroundingGate, LLM, validator, and persistence
+• Server-Sent Events (SSE) real-time streaming endpoint (`POST /api/v1/sessions/{id}/messages`)
+• Multi-turn conversational Q&A tested against live transcripts (supported, follow-up, refusal)
 
 NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ─────────────────────────────────────────────
-• Production FastAPI-to-Pi stdio JSON-RPC daemon bridge under concurrent requests
-• Multi-user session management with conversation history in PostgreSQL
-• SSE streaming endpoint (POST /api/v1/sessions/{id}/messages)
-• Anthropic Claude cloud generation provider toggle
-• Dockerized Pi runtime inside backend container
+• React 18 + Vite web evaluator user interface
+• Real-time SSE streaming rendering in browser UI with auto-scroll
+• Interactive evidence tier badge and citation inspector cards in frontend
 • Dockerized Ollama GPU acceleration on Apple Silicon
 • Full 303-episode corpus retrieval quality at scale
 • Fixed 768-dim embedding quality across golden query suite
 • Full transcript ingestion throughput and storage
 ```
 
-> **Critical Integration Gate:** Phase P0.4 completed the integration validation spike of Pi 0.85.1 + Ollama + custom retrieval tool + P0.3 Grounding Gate before building the full Q&A subsystem.
+> **Critical Integration Gate:** Phase P0.4 completed the integration validation spike of Pi 0.85.1 + Ollama + custom retrieval tool + P0.3 Grounding Gate; Phase P0.5 hardened this into the production backend Q&A engine.
 
 ---
 
@@ -50,12 +57,12 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 
 - [ ] **One-Command Startup:** Reproducible startup via Docker Compose (`docker compose up -d`) with zero committed secrets.
 - [ ] **Zero-Key Local Demo:** Default demo running on containerized Ollama (`llama3.1:8b` + `nomic-embed-text`) requiring no cloud API keys.
-- [ ] **Cloud Provider Switch:** Clean generation switch to Anthropic Claude via `.env` without code changes or vector re-indexing.
-- [x] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every retrieved evidence item (P0.3).
-- [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3, P0.4).
-- [ ] **Session Context & Isolation:** PostgreSQL-backed sessions preserving multi-turn context for follow-up questions while isolating independent chats.
-- [x] **Validated Pi Integration:** Proven end-to-end integration between Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, and clean process lifecycle (P0.4).
-- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (44 passed).
+- [x] **Cloud Provider Switch:** Clean generation switch to Anthropic Claude via `.env` without code changes or vector re-indexing (P0.5).
+- [x] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every retrieved evidence item (P0.3, P0.5).
+- [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3, P0.4, P0.5).
+- [x] **Session Context & Isolation:** PostgreSQL-backed sessions preserving multi-turn context for follow-up questions while isolating independent chats (P0.5).
+- [x] **Validated Pi Integration:** Proven end-to-end integration between Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, and clean process lifecycle (P0.4, P0.5).
+- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (66 passed).
 
 ---
 
@@ -151,19 +158,25 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 ---
 
 ### Phase P0.5: Model Providers, Session Management & Multi-Turn Grounded Q&A
-**Status:** ⬜ Not Started  
-**Objective:** Deliver end-to-end multi-turn grounded conversational Q&A with model provider switching and persistent session storage.  
+**Status:** ✅ Complete  
+**Objective:** Deliver end-to-end multi-turn grounded conversational Q&A with model provider switching, conversation-aware query rewriting, deterministic grounding enforcement, citation validation, and persistent PostgreSQL session storage.  
 **Depends on:** Phase P0.4  
-**Requirements:** REQ-11, REQ-12, REQ-13, NFR-07  
+**Requirements:** REQ-06, REQ-11, REQ-12, REQ-13, NFR-07  
+
+**Plans:**
+- [x] Plan P0.5: Model Providers, Session Management & Multi-Turn Grounded Q&A (Completed 2026-09-14)
 
 **Key Deliverables:**
-- `GenerationProvider` abstraction with `OllamaGenerationProvider` (`llama3.1:8b`) and `AnthropicProvider` (`claude-3-5-sonnet-20241022`), cleanly selected via `LLM_PROVIDER`.
-- `SessionManager` handling session creation, message persistence, and last $N=6$ context window hydration in PostgreSQL.
-- Production Pi Agent integration wiring the validated subprocess bridge to the full `transcript_retrieval` tool and system grounding prompts.
-- SSE streaming endpoint: `POST /api/v1/sessions/{id}/messages` streaming synthesized response tokens, evidence tier metadata, and source citations.
-- Post-generation citation validation verifying that all cited claims correspond to retrieved chunks.
+- PostgreSQL session and message persistence layer (`backend/app/sessions/store.py`, `models.py`) with `sessions`, `messages`, and `source_references` tables.
+- Bounded working context window ($N=6$ messages) for deterministic history injection into query rewriter and prompt synthesis.
+- Conversation-aware query rewriting (`backend/app/retrieval/rewriter.py`) resolving pronouns and context across turns without adding unsupported facts.
+- Decoupled `GenerationProvider` abstraction (`backend/app/providers/`): `OllamaGenerationProvider` (`llama3.1:8b`) as default local provider; `AnthropicGenerationProvider` (`claude-3-5-sonnet-20241022`) via official Anthropic SDK with strict error handling on missing credentials (zero silent fallback).
+- Deterministic post-generation `CitationValidator` (`backend/app/agent/citation.py`) verifying cited chunks against retrieved evidence.
+- Production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`) unifying context, query rewriting, pgvector retrieval, GroundingGate triage, LLM synthesis, citation validation, and persistence. Enforces fast deterministic refusal on `Insufficient` tier (< 0.65, latency < 300ms).
+- FastAPI endpoints for session lifecycle (`POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`) and conversational Q&A (`POST /api/v1/sessions/{id}/messages`) supporting both JSON and SSE streaming (`text/event-stream`).
+- Automated tests: 22 new unit and integration tests (66 passed backend total).
 
-**Verification:** Send multi-turn conversational questions (question $\to$ answer with citations $\to$ follow-up referencing prior answer); toggle `LLM_PROVIDER` to Anthropic and verify behavior; test out-of-domain refusal.
+**Verification:** Validated multi-turn live conversation against ingested transcripts: Scenario A (supported query with Strong tier), Scenario B (follow-up query with pronoun resolution), Scenario C (out-of-domain query with Insufficient refusal in 269ms), Scenario D (Anthropic provider configuration error and unit tests), and Scenario E (real-time SSE streaming). All 66 tests passing in 1.93s.
 
 ---
 

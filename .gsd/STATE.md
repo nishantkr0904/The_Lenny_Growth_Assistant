@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14T16:00:00Z
+updated: 2026-09-14T16:30:00Z
 ---
 
 # Project State
@@ -7,33 +7,34 @@ updated: 2026-09-14T16:00:00Z
 ## Current Position
 
 **Milestone:** v0.1 — P0 Core Grounded Assistant  
-**Phase:** P0.4 — Pi Coding Agent Bridge Validation Spike  
+**Phase:** P0.5 — Model Providers, Session Management & Multi-Turn Grounded Q&A  
 **Status:** ✅ Complete  
-**Plan:** Plan P0.4 executed and verified  
+**Plan:** Plan P0.5 executed and verified  
 
 ---
 
 ## Last Action
 
-Successfully executed and verified **Phase P0.4 (Pi Coding Agent Bridge Validation Spike)**:
-- Defined project-local custom retrieval tool `transcript_retrieval` in `.pi/extensions/transcript_retrieval.ts` via Pi's `defineTool` API, querying `POST /api/v1/retrieval/search` and enforcing grounding directives.
-- Implemented Python tool adapter in `backend/app/agent/retrieval_tool.py` providing `format_evidence_for_agent` and `execute_transcript_retrieval`, converting retrieval responses into structured XML with `<chunk>` citations or `<system_directive>NO_GROUNDED_EVIDENCE</system_directive>`.
-- Built comprehensive automated test suite `backend/tests/test_agent_tool.py` (5 tests); verified full backend suite (44 tests) passing green.
-- Implemented multi-turn spike execution runner in `spikes/run_pi_spike.mjs` using `@earendil-works/pi-coding-agent 0.85.1` headless SDK (`createAgentSession`, `ModelRuntime`, Ollama `llama3.1:8b`).
-- Empirically validated Turn 1 (Ada Chen Rekhi question): tool invoked (157ms), returned 4 chunks (`Limited` tier, score 0.7474), Pi synthesized grounded response with source attribution.
-- Empirically validated Turn 2 (out-of-domain quantum chromodynamics question): tool invoked (643ms), returned `Insufficient` tier (score 0.4492), Pi obeyed refusal directive without fabricating knowledge.
-- Verified clean lifecycle: `session.dispose()` invoked, process exited with code 0, 0 orphaned Node.js/Pi processes.
+Successfully executed and verified **Phase P0.5 (Model Providers, Session Management & Multi-Turn Grounded Q&A)**:
+- Implemented PostgreSQL-backed session and message store (`backend/app/sessions/store.py`, `models.py`) persisting sessions, message turns, and structured source references (`source_references` table).
+- Implemented conversation-aware query rewriter (`backend/app/retrieval/rewriter.py`) resolving pronouns ("she", "that", "what about") from bounded conversation history ($N=6$ messages) without hallucinating answers.
+- Implemented decoupled generation provider abstraction (`backend/app/providers/`): `OllamaGenerationProvider` (default local `llama3.1:8b`) and `AnthropicGenerationProvider` (official SDK `claude-3-5-sonnet-20241022`). Enforced strict configuration check: missing Anthropic credentials raise `ProviderConfigurationError` immediately without silent fallback.
+- Implemented post-generation `CitationValidator` (`backend/app/agent/citation.py`) verifying cited chunk UUIDs against retrieved evidence and preventing hallucinated sources.
+- Built production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`) unifying session context, query rewriting, pgvector retrieval, GroundingGate triage, LLM synthesis, citation validation, and message persistence. Enforced deterministic refusal on `Insufficient` tier ($< 0.65$, bypasses LLM, latency < 300ms).
+- Implemented FastAPI session routes (`POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`) and grounded Q&A endpoint (`POST /api/v1/sessions/{id}/messages`) supporting both structured JSON and Server-Sent Events (SSE `text/event-stream`).
+- Added 22 new unit and integration tests; full backend test suite passes with 66 green tests.
+- Empirically validated multi-turn live conversation against ingested transcripts: Scenario A (supported query), Scenario B (follow-up with pronoun resolution), Scenario C (unsupported refusal), and SSE streaming.
 
 ---
 
 ## Next Steps
 
-1. **Phase P0.5 Execution Planning:** Author execution plan for Phase P0.5 in `.gsd/phases/P0.5/PLAN.md`.
-2. **GenerationProvider Abstraction:** Implement Ollama (default local) and Anthropic Claude (P0 cloud) generation provider toggle via `.env`.
-3. **Session Management:** Implement `SessionManager` in PostgreSQL managing multi-turn conversation history and message persistence.
-4. **FastAPI-to-Pi Production Bridge:** Implement production subprocess bridge / streaming runner for FastAPI.
-5. **SSE Streaming Endpoint:** Implement `POST /api/v1/sessions/{id}/messages` with Server-Sent Events.
-6. **Post-Generation Citation Validator:** Implement citation check ensuring verbatim provenance before delivery.
+1. **Phase P0.6 Planning:** Author execution plan for Phase P0.6 in `.gsd/phases/P0.6/PLAN.md`.
+2. **React 18 + Vite Frontend Scaffold:** Initialize frontend client with TailwindCSS and modern responsive layout.
+3. **Conversational Chat UI:** Build real-time streaming chat component consuming SSE endpoint (`POST /api/v1/sessions/{id}/messages`).
+4. **Session Switcher & Provider Badge:** Build session drawer and active model provider status indicator.
+5. **Evidence Badges & Citation Cards:** Render interactive grounding tier badges (`Strong`, `Limited`, `Conflicting`, `Insufficient`) and source inspector cards.
+6. **Milestone v0.1 Audit:** Verify end-to-end user experience, startup reproducibility, and all P0 acceptance criteria.
 
 ---
 
@@ -59,20 +60,22 @@ Successfully executed and verified **Phase P0.4 (Pi Coding Agent Bridge Validati
 
 ## Blockers
 
-*None. Phase P0.3 complete and verified; environment is live.*
+*None. Phase P0.5 complete and verified; environment is live.*
 
 ---
 
 ## Concerns & Watchlist
 
-- **Pi Subprocess Bridge Risk:** Mandatory standalone validation spike scheduled as first task of Phase P0.4.
+- **Local Ollama CPU Inference Latency:** Prompt evaluation + token generation on containerized Ollama (CPU) requires ~50-59s for full multi-chunk synthesis. Mitigated by setting `OLLAMA_TIMEOUT_SECONDS: 180.0` and `max_tokens: 384`. Real-time SSE token streaming delivers tokens to the user as they are generated.
+- **Cloud Provider Live Keys:** Anthropic integration verified via unit tests and strict configuration validation (zero silent fallback). Live cloud testing requires user to provide `ANTHROPIC_API_KEY`.
 
 ---
 
 ## Session Context
 
-- Phase P0.3 implemented and verified.
-- Containers running: `lenny_postgres` (healthy), `lenny_ollama` (up), `lenny_backend` (up).
-- All P0.3 acceptance criteria satisfied.
-- Full pytest suite: 39 passed in 0.59s.
-- Strict constraint preserved: Zero P0.4 application code implemented.
+- Phase P0.5 implemented and verified.
+- Containers running: `lenny_postgres` (healthy on port 5433), `lenny_ollama` (up), `lenny_backend` (up on port 8000).
+- All P0.5 acceptance criteria satisfied.
+- Full pytest suite: 66 passed in 1.93s.
+- Strict constraint preserved: Zero P0.6 frontend or UI code implemented.
+

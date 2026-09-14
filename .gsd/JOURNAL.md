@@ -195,6 +195,52 @@ Execute Phase P0.4: Validate the critical integration boundary between Pi Coding
 
 ---
 
+### Session: 2026-09-14 16:30 (Phase P0.5 Model Providers, Session Management & Multi-Turn Grounded Q&A Execution)
+
+#### Objective
+Execute Phase P0.5: Harden the validated P0.4 spike into a production-oriented backend Q&A foundation. Implement PostgreSQL session and message persistence, bounded conversation history ($N=6$), conversation-aware query rewriting for pronoun resolution, decoupled generation provider abstraction (Ollama default local + Anthropic Claude cloud), deterministic GroundingGate enforcement, post-generation citation validation, production Q&A orchestrator, FastAPI streaming Q&A endpoint (`POST /api/v1/sessions/{id}/messages`), automated tests, and real end-to-end multi-turn verification.
+
+#### Accomplished
+- ✅ **Created Phase Plan:** Authored `.gsd/phases/P0.5/PLAN.md` detailing 5 implementation tasks, verification procedures, and atomic commit sequence.
+- ✅ **Session & Message Persistence Layer:** Implemented `backend/app/sessions/models.py` and `backend/app/sessions/store.py` (`SessionStore`). Persists sessions, message turns with role/content/grounding metadata/token stats, and structured source references (`source_references` table) with chunk UUID, episode ID, similarity score, and verbatim excerpt. Hydrates bounded conversation context ($N=6$ messages) in deterministic chronological order.
+- ✅ **Conversation-Aware Query Rewriter:** Implemented `backend/app/retrieval/rewriter.py`. Analyzes current query and bounded context history to resolve pronouns ("she", "he", "it", "that", "what about") into standalone retrieval queries preserving proper nouns (e.g., "Ada Chen Rekhi"). Uses deterministic regex rule-based resolution with optional LLM boundary; strictly prevents hallucinated answers or external knowledge leakage.
+- ✅ **Decoupled Generation Provider Abstraction:** Implemented `backend/app/providers/base.py`, `ollama.py`, `anthropic.py`, and `factory.py`. Decouples generation from the fixed 768-dim embedding provider (`nomic-embed-text`). `OllamaGenerationProvider` operates as local default (`llama3.1:8b`). `AnthropicGenerationProvider` integrates official `anthropic` SDK (`claude-3-5-sonnet-20241022`). Strictly validates API keys: missing `ANTHROPIC_API_KEY` raises `ProviderConfigurationError` immediately with zero silent fallback to Ollama.
+- ✅ **Production Q&A Orchestrator & Citation Validator:** Implemented `backend/app/agent/citation.py` and `backend/app/agent/orchestrator.py`. Validates that all cited chunk UUIDs match retrieved evidence items. Unifies bounded history, query rewriting, pgvector cosine search, GroundingGate evaluation, LLM synthesis, citation validation, and message persistence. Fast deterministic refusal on `Insufficient` tier (< 0.65) bypasses the LLM completely with latency < 300ms.
+- ✅ **Session & Streaming Q&A API Endpoints:** Implemented `backend/app/api/v1/sessions.py` registered in `backend/app/main.py`. Provides `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, and `POST /api/v1/sessions/{id}/messages`. Supports both structured JSON responses and Server-Sent Events (SSE `text/event-stream`) emitting `thinking`, `evidence`, `delta`, and `done` events.
+- ✅ **Timeout & Token Budget Tuning:** Optimized `OLLAMA_TIMEOUT_SECONDS: float = 180.0` in `app/core/config.py` and set `max_tokens: 384` for prompt synthesis to ensure local Ollama CPU inference reliably completes without read timeouts.
+- ✅ **Automated Unit & Integration Tests:** Added 22 new tests across `test_sessions.py`, `test_rewriter.py`, `test_providers.py`, `test_citation.py`, and `test_qna_api.py`. Full repository suite passes with 66 green tests in 1.93s.
+- ✅ **Live Empirical Verification:**
+  - **Scenario A (Supported Query):** Ada Chen Rekhi career query returned 200 OK, `tier: "Strong"` (score 0.8066), 5 verified chunks, synthesized answer.
+  - **Scenario B (Follow-up Turn with Pronoun Resolution):** Follow-up `"What did she say about career exploration vs exploitation?"` rewritten to include Ada Chen Rekhi, retrieved Chunk #14 (`tier: "Limited"`, score 0.6888), synthesized grounded answer, session history verified with 4 turns.
+  - **Scenario C (Unsupported Query):** Quantum chromodynamics query returned instant deterministic refusal in 269ms (`tier: "Insufficient"`, `sources: []`, zero LLM hallucination).
+  - **Scenario D (Cloud Provider):** Anthropic provider unit-tested and verified; confirmed `ProviderConfigurationError` raised when key is missing (zero silent fallback).
+  - **Scenario E (Real-Time SSE Streaming):** Tested `stream: true` receiving `event: thinking`, `event: evidence`, `event: delta`, `event: done`.
+
+#### Verification
+- [x] Full test suite: `docker compose exec backend pytest -v` passes all 66 tests in 1.93s
+- [x] PostgreSQL session and message persistence operational
+- [x] Bounded context window ($N=6$) limits working history deterministically
+- [x] Query rewriter resolves conversational references without answer hallucinations
+- [x] Decoupled provider layer supports Ollama and Anthropic
+- [x] Missing Anthropic API key fails cleanly without silent Ollama fallback
+- [x] CitationValidator rejects fabricated or nonexistent chunk citations
+- [x] GroundingGate 4-tier taxonomy strictly enforced; Insufficient refuses deterministically in < 300ms
+- [x] Multi-turn conversational Q&A verified end-to-end against live database
+- [x] SSE streaming verified delivering real-time event stream
+- [x] Zero P0.6 frontend or UI code implemented
+- [x] Atomic git commits created and verified for all tasks
+
+#### Blockers Encountered
+- Local Ollama CPU inference on Docker for a 2,400-token prompt with 4 transcript chunks required ~55s, briefly hitting the default 60s HTTP client timeout. Resolved cleanly by adjusting `OLLAMA_TIMEOUT_SECONDS: 180.0` and bounding generation `max_tokens: 384`.
+
+#### Handoff Notes
+- Phase P0.5 is complete and verified.
+- Next phase is Phase P0.6: Minimal Evaluator UI & Critical Automated Test Suite (React 18 + Vite frontend, SSE streaming chat, provider badge, citation cards, and full test suite).
+- Strict scope boundary preserved: Zero P0.6 React frontend or UI component code implemented in P0.5.
+
+---
+
 *Last updated: 2026-09-14*
+
 
 
