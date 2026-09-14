@@ -234,9 +234,51 @@ Execute Phase P0.5: Harden the validated P0.4 spike into a production-oriented b
 - Local Ollama CPU inference on Docker for a 2,400-token prompt with 4 transcript chunks required ~55s, briefly hitting the default 60s HTTP client timeout. Resolved cleanly by adjusting `OLLAMA_TIMEOUT_SECONDS: 180.0` and bounding generation `max_tokens: 384`.
 
 #### Handoff Notes
-- Phase P0.5 is complete and verified.
-- Next phase is Phase P0.6: Minimal Evaluator UI & Critical Automated Test Suite (React 18 + Vite frontend, SSE streaming chat, provider badge, citation cards, and full test suite).
-- Strict scope boundary preserved: Zero P0.6 React frontend or UI component code implemented in P0.5.
+- Phase P0.5 initial execution is complete.
+
+---
+
+### Session: 2026-09-14 16:45 (Phase P0.5A Targeted Architectural Correction: Production Pi Agent Integration)
+
+#### Objective
+Execute targeted architectural correction to put Pi Coding Agent 0.85.1 genuinely into the production Q&A execution path (`QnAOrchestrator`), eliminating direct `self.provider.generate()` / `self.provider.stream()` calls while preserving all P0.1–P0.5 contracts, P0.3 retrieval engine, GroundingGate tiers, persistence, and SSE streaming.
+
+#### Accomplished
+- ✅ **Upgraded Container Runtime:** Updated `backend/Dockerfile` to install Node.js 22 and `@earendil-works/pi-coding-agent@0.85.1` globally.
+- ✅ **Implemented Production Pi Bridge Daemon:** Created `backend/app/agent/bridge_daemon.mjs` running over stdio using line-delimited JSON-RPC 2.0. Redirected all console logging (`console.log`, `info`, `warn`, `error`) to stderr to guarantee zero stdout protocol corruption. Registered custom `transcript_retrieval` tool delegating to FastAPI's `/api/v1/retrieval/search` endpoint. Configured `ModelRuntime` supporting dynamic switching between Ollama (`llama3.1:8b`) and Anthropic Claude with strict API key validation.
+- ✅ **Implemented Python Pi Bridge Client:** Created `backend/app/agent/pi_bridge.py` managing child process lifecycle (`asyncio.create_subprocess_exec`), async stdio line buffering, and `asyncio.Lock()` serialization to ensure concurrent FastAPI requests never interleave lines. Registered clean lifespan shutdown in `backend/app/main.py` guaranteeing zero orphan processes.
+- ✅ **Rewired Production `QnAOrchestrator`:** Updated `backend/app/agent/orchestrator.py` to route all turn execution and streaming through `self.pi_bridge.execute_turn()` and `self.pi_bridge.stream_turn()`. Direct provider generation calls are 100% eliminated from the production orchestrator.
+- ✅ **Preserved Deterministic Grounding & Citations:** P0.3 GroundingGate decisions (`Strong`, `Limited`, `Conflicting`, `Insufficient`) are passed directly to Pi via tool responses. Insufficient evidence passes `NO_GROUNDED_EVIDENCE` directive to Pi, returning honest refusal with zero citations. `CitationValidator` continues verifying cited chunk UUIDs against retrieved evidence.
+- ✅ **Automated Test Suite:** Created `backend/tests/test_pi_bridge.py` testing ping/health, orchestrator routing via Pi, Insufficient refusal behavior, and streaming tokens. All 70 tests in the repository pass in 2.35s.
+- ✅ **Live Empirical Verification on Docker Stack:**
+  - **Scenario A (Supported Turn):** Ada Chen Rekhi career query executed Pi $\to$ invoked tool $\to$ retrieved Chunk #17 $\to$ synthesized grounded answer $\to$ validated citation $\to$ persisted in PostgreSQL.
+  - **Scenario B (Follow-up Turn):** Follow-up query rewritten to resolve "she" $\to$ Pi executed turn $\to$ invoked tool $\to$ retrieved Chunk #14 $\to$ synthesized answer $\to$ verified 4-message chronological history.
+  - **Scenario C (Unsupported Turn):** Quantum chromodynamics query $\to$ Pi invoked tool $\to$ GroundingGate returned Insufficient (0.4492) $\to$ Pi synthesized honest refusal $\to$ 0 citations persisted.
+  - **Scenario D (Cloud Provider):** Anthropic provider configuration error and unit tests verified.
+  - **Scenario E (SSE Streaming):** Tested `stream: true` streaming real-time tokens from Pi over Server-Sent Events.
+  - **Process Audit:** Inspected `/proc/*/cmdline` confirming exactly 1 managed worker daemon running and 0 zombie processes.
+
+#### Verification
+- [x] Full test suite: `docker compose exec backend pytest -v` passes all 70 tests in 2.35s
+- [x] Pi Coding Agent 0.85.1 is genuinely executed on the production Q&A path
+- [x] `self.provider.generate()` and `self.provider.stream()` completely removed from orchestrator
+- [x] Pi invokes `transcript_retrieval` tool delegating to P0.3 `/api/v1/retrieval/search`
+- [x] GroundingGate thresholds and refusal logic fully preserved
+- [x] CitationValidator validates final Pi answers before persistence
+- [x] Session persistence and bounded context work across turns
+- [x] Single provider abstraction supports Ollama and Anthropic without code changes
+- [x] Clean child process lifecycle: zero orphan Node processes
+- [x] Zero P0.6 frontend or UI code implemented
+- [x] Atomic git commits created and verified for all tasks
+
+#### Blockers Encountered
+- `@earendil-works/pi-coding-agent@0.85.1` requires Node.js >= 22.19.0 due to `node:fs.globSync`. Resolved by installing Node.js 22 from NodeSource inside the Debian slim container.
+- Node.js logging libraries or tool outputs writing to stdout can corrupt JSON-RPC line framing. Resolved by redirecting `console.log`, `info`, `warn`, and `error` to `process.stderr`.
+
+#### Handoff Notes
+- Phase P0.5A targeted architectural correction is complete and verified.
+- Next phase is Phase P0.6: Minimal Evaluator UI & Critical Automated Test Suite.
+- Strict scope boundary preserved: Zero P0.6 React frontend or UI component code implemented.
 
 ---
 

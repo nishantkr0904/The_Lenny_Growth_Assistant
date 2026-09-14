@@ -55,6 +55,7 @@
 - [x] Wire Pi Agent with production bridge and system grounding prompt `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Implement SSE streaming endpoint `POST /api/v1/sessions/{id}/messages` `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 - [x] Implement post-generation citation validator `high` 🔴 — 2026-09-14 ✓ 2026-09-14
+- [x] Phase P0.5A Architectural Correction: Production Pi Bridge Daemon & QnAOrchestrator Routing `high` 🔴 — 2026-09-14 ✓ 2026-09-14
 
 ### Phase P0.6 Evaluator UI & Test Suite
 - [ ] Scaffold React 18 + Vite frontend with TailwindCSS `high` 🔴 — 2026-09-14

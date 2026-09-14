@@ -11,42 +11,61 @@
 ## 1. Executive Summary
 
 Phase P0.5 turned the validated P0.4 Pi + retrieval spike into the **production-oriented conversational backend Q&A foundation**:
-1. **Session & Message Persistence:** Fully implemented relational conversation store (`sessions`, `messages`, `source_references`) in PostgreSQL 16.
-2. **Bounded Context Window:** Enforced bounded working context (last $N=6$ messages, 3 user/assistant turns) for model inference and query rewriting.
-3. **Conversation-Aware Query Rewriter:** Automatically resolves pronouns ("she", "that", "what about") and ambiguous follow-ups into self-contained retrieval queries.
-4. **Generation Provider Abstraction:** Decoupled model generation from corpus embeddings. Implemented `OllamaGenerationProvider` (default local) and `AnthropicGenerationProvider` (official SDK). Zero silent fallbacks: missing Anthropic credentials immediately raise `ProviderConfigurationError`.
-5. **Deterministic Grounding Gate & Refusal:** Preserved the canonical 4-tier taxonomy (`Strong`, `Limited`, `Conflicting`, `Insufficient`). When evidence is `Insufficient`, LLM synthesis is bypassed entirely, returning an honest grounded refusal in $<300\text{ms}$ with zero hallucinations.
-6. **Post-Generation Citation Validator:** Validates model-generated citations against retrieved chunks, prevents fabricated chunk references, and persists structured source metadata.
-7. **FastAPI Q&A Endpoints:** Implemented `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, and `POST /api/v1/sessions/{id}/messages` supporting both JSON and Server-Sent Events (`text/event-stream`).
-8. **Empirical Verification:** Executed multi-turn live conversation against ingested transcripts; verified Turn 1 synthesis, Turn 2 pronoun resolution follow-up, and Turn 3 out-of-domain refusal. Full test suite: 66 passed.
+1. **Pi Coding Agent as Production Agent Layer:** Integrated Pi Coding Agent 0.85.1 as the production cognitive orchestrator via a long-running stdio JSON-RPC bridge daemon (`backend/app/agent/bridge_daemon.mjs` ↔ `backend/app/agent/pi_bridge.py`). All logging is redirected to stderr to preserve uncorrupted stdio protocol framing.
+2. **Autonomous Tool Invocation:** Pi autonomously decides when and how to invoke the registered `transcript_retrieval` tool extension, which calls FastAPI's `/api/v1/retrieval/search` endpoint.
+3. **P0.3 Vector Retrieval & GroundingGate Integration:** The tool delegates directly to the existing P0.3 `VectorRetrievalEngine` and `GroundingGate`, returning typed XML evidence chunks or `NO_GROUNDED_EVIDENCE` refusal directives.
+4. **Session & Message Persistence:** Relational conversation store (`sessions`, `messages`, `source_references`) in PostgreSQL 16.
+5. **Bounded Context Window:** Enforced bounded working context (last $N=6$ messages, 3 user/assistant turns) for model inference and query rewriting.
+6. **Conversation-Aware Query Rewriter:** Automatically resolves pronouns ("she", "that", "what about") and ambiguous follow-ups into self-contained retrieval queries.
+7. **Generation Provider Abstraction:** Decoupled model generation from corpus embeddings. Supports `ollama` (`llama3.1:8b`) as default local provider and `anthropic` (official SDK) as cloud provider. Zero silent fallbacks: missing Anthropic credentials immediately raise `ProviderConfigurationError`.
+8. **Deterministic Grounding Enforcement & Refusal:** Preserved the canonical 4-tier taxonomy (`Strong`, `Limited`, `Conflicting`, `Insufficient`). When evidence is `Insufficient`, Pi receives the `NO_GROUNDED_EVIDENCE` directive and produces an honest refusal with 0 citations.
+9. **Post-Generation Citation Validator:** Validates model-generated citations against retrieved chunks, prevents fabricated chunk references, and persists structured source metadata.
+10. **FastAPI Q&A Endpoints:** Implemented `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, and `POST /api/v1/sessions/{id}/messages` supporting both JSON and real-time Server-Sent Events (`text/event-stream`).
+11. **Empirical Verification:** Executed multi-turn live conversation against ingested transcripts; verified Turn 1 synthesis, Turn 2 pronoun resolution follow-up, Turn 3 out-of-domain refusal, and real-time SSE token streaming. Full test suite: 70 passed.
 
 ---
 
 ## 2. Architecture & Flow Validated
 
 ```
-User Query (HTTP POST)
-    ↓
-FastAPI Gateway (/api/v1/sessions/{id}/messages)
-    ↓
+User Query (HTTP POST /api/v1/sessions/{id}/messages)
+    │
+    ▼
+FastAPI Gateway
+    │
+    ▼
 Session Store (Save user message; hydrate bounded context: last N=6 turns)
-    ↓
+    │
+    ▼
 ConversationQueryRewriter (Resolve pronouns/follow-ups into standalone query)
-    ↓
+    │
+    ▼
+PiBridgeClient (Python IPC Client managing Node.js daemon lifecycle)
+    │ stdio JSON-RPC 2.0
+    ▼
+Pi Agent Runtime (backend/app/agent/bridge_daemon.mjs)
+    │ createAgentSession + customTools: [transcriptRetrievalTool]
+    ▼
+transcript_retrieval Tool Extension
+    │ HTTP POST /api/v1/retrieval/search
+    ▼
 VectorRetrievalEngine (Cosine <=> over pgvector HNSW index)
-    ↓
+    │
+    ▼
 GroundingGate (Triage: Strong / Limited / Conflicting / Insufficient)
-    ├── If Insufficient: Deterministic refusal (Bypass LLM, 0 citations, <300ms)
-    └── If Strong / Limited / Conflicting:
-            ↓
-        System Grounding Prompt + Structured XML Evidence
-            ↓
-        Generation Provider (Ollama llama3.1:8b / Anthropic Claude)
-            ↓
+    ├── If Insufficient: Return NO_GROUNDED_EVIDENCE directive (0 citations)
+    └── If Strong / Limited / Conflicting: Return structured XML chunks
+            │
+            ▼
+        Pi Cognitive Synthesis (Ollama llama3.1:8b / Anthropic Claude)
+            │ (Streams token deltas over stdout JSON-RPC notifications)
+            ▼
         CitationValidator (Verify cited chunks against retrieved evidence)
-            ↓
+            │
+            ▼
         Session Store (Save assistant message, source_references, latency)
-            ↓
+            │
+            ▼
 Response Boundary (Structured JSON or SSE text/event-stream)
 ```
 
@@ -56,58 +75,73 @@ Response Boundary (Structured JSON or SSE text/event-stream)
 
 | Component | Files | Description |
 | :--- | :--- | :--- |
+| **Pi Bridge Runtime** | `backend/app/agent/bridge_daemon.mjs`<br>`backend/app/agent/pi_bridge.py` | Long-running Node.js bridge daemon using stdio JSON-RPC and Python async client managing child process lifecycle. |
 | **Sessions** | `backend/app/sessions/models.py`<br>`backend/app/sessions/store.py`<br>`backend/app/sessions/__init__.py` | Relational persistence schemas and PostgreSQL store for sessions, messages, and source references. |
 | **Rewriter** | `backend/app/retrieval/rewriter.py`<br>`backend/app/retrieval/__init__.py` | Conversation-aware query rewriter with pronoun trigger detection and context anchoring. |
 | **Providers** | `backend/app/providers/base.py`<br>`backend/app/providers/ollama.py`<br>`backend/app/providers/anthropic.py`<br>`backend/app/providers/factory.py`<br>`backend/app/providers/__init__.py` | Abstract `GenerationProvider` interface, local Ollama provider, cloud Anthropic provider, and factory. |
-| **Agent / Q&A** | `backend/app/agent/citation.py`<br>`backend/app/agent/orchestrator.py`<br>`backend/app/agent/__init__.py` | `CitationValidator` and production `QnAOrchestrator` handling turn execution and SSE streaming. |
+| **Agent / Q&A** | `backend/app/agent/citation.py`<br>`backend/app/agent/orchestrator.py`<br>`backend/app/agent/__init__.py` | `CitationValidator` and production `QnAOrchestrator` routing turns through Pi Coding Agent and emitting SSE streaming events. |
 | **API Endpoints** | `backend/app/api/v1/sessions.py`<br>`backend/app/main.py` | FastAPI routes for sessions CRUD and message submission (`POST /api/v1/sessions/{id}/messages`). |
-| **Config & Deps** | `backend/app/core/config.py`<br>`backend/pyproject.toml` | Added `anthropic>=0.20.0`, configured `OLLAMA_TIMEOUT_SECONDS: 180.0`. |
-| **Tests** | `backend/tests/test_sessions.py`<br>`backend/tests/test_rewriter.py`<br>`backend/tests/test_providers.py`<br>`backend/tests/test_citation.py`<br>`backend/tests/test_qna_api.py` | 22 new unit and integration tests across persistence, rewriting, providers, citations, and API routes. |
+| **Config & Deps** | `backend/Dockerfile`<br>`backend/app/core/config.py`<br>`backend/pyproject.toml` | Installed Node.js 22 and `@earendil-works/pi-coding-agent@0.85.1` globally, added `anthropic>=0.20.0`, configured `OLLAMA_TIMEOUT_SECONDS: 180.0`. |
+| **Tests** | `backend/tests/test_pi_bridge.py`<br>`backend/tests/test_sessions.py`<br>`backend/tests/test_rewriter.py`<br>`backend/tests/test_providers.py`<br>`backend/tests/test_citation.py`<br>`backend/tests/test_qna_api.py` | 26 tests across Pi bridge, persistence, rewriting, providers, citations, and API routes (70 passed total). |
 
 ---
 
 ## 4. End-to-End Live Validation Results
 
 ### Scenario A — Supported Turn (Ada Chen Rekhi)
-- **Endpoint:** `POST /api/v1/sessions/f1311c00-2314-4b14-a749-87c5f4d9b7b6/messages` (`stream: false`)
+- **Endpoint:** `POST /api/v1/sessions/0868d122-2fb5-4369-bc9d-fa740675ef4c/messages` (`stream: false`)
 - **Query:** `"According to Ada Chen Rekhi, what should you do when you feel stuck or like a boiling frog in your career?"`
+- **Execution:** Pi Coding Agent spawned $\to$ autonomously invoked `transcript_retrieval` with query `"Ada Chen Rekhi stuck boiling frog career advice"` $\to$ retrieved Chunk #17 $\to$ synthesized grounded answer.
 - **Result:**
   - Status: 200 OK
-  - Grounding Tier: `Strong` (Top score: `0.8066`)
-  - Retrieved & Verified Chunks: 5 chunks from episode *"Feeling stuck? Here's how to know when it's time to leave your job | Ada Chen Rekhi"*
-  - Content: Synthesized answer addressing boiling frog syndrome, exploration, and coaching considerations.
-  - Citations: 5 `SourceReferenceItem` records persisted in PostgreSQL.
+  - Grounding Tier: `Limited` (Top score: `0.6895`)
+  - Agent: `pi-coding-agent`
+  - Content: *"According to Ada Chen Rekhi, when you feel stuck or like a boiling frog in your career, it's essential to be aware of your surroundings and the direction of the temperature of the water. You should ask yourself if you're learning, growing, and developing in your current role. If you're not, it may be time to have a proactive conversation with your manager or leadership..."*
+  - Citations: Chunk #17 validated and persisted in PostgreSQL.
 
 ---
 
 ### Scenario B — Follow-Up Turn with Pronoun Resolution
-- **Endpoint:** `POST /api/v1/sessions/f1311c00-2314-4b14-a749-87c5f4d9b7b6/messages` (`stream: false`)
+- **Endpoint:** `POST /api/v1/sessions/0868d122-2fb5-4369-bc9d-fa740675ef4c/messages` (`stream: false`)
 - **Query:** `"What did she say about career exploration vs exploitation?"`
-- **Rewriter Behavior:** Resolved "she" using prior conversation context into Ada Chen Rekhi exploration vs exploitation search.
+- **Rewriter Behavior:** Resolved "she" using prior conversation context into Ada Chen Rekhi search.
+- **Execution:** Pi Coding Agent invoked `transcript_retrieval` with query `"career exploration vs exploitation in Ada Chen Rekhi You"` $\to$ retrieved Chunk #14.
 - **Result:**
   - Status: 200 OK
-  - Grounding Tier: `Limited` (Top score: `0.6888`)
-  - Retrieved Chunk: Chunk #14 where Ada Chen Rekhi contrasts explore mode with exploit mode.
-  - Content: *"According to Ada Chen Rekhi, in the context of career exploration, she explains that there are two modes: 'explore' and 'exploit'..."*
-  - Session Verification: `GET /api/v1/sessions/{id}` confirmed all 4 message turns persisted in chronological order.
+  - Grounding Tier: `Limited` (Top score: `0.6780`)
+  - Agent: `pi-coding-agent`
+  - Content: *"According to Ada Chen Rekhi, in the context of career development, 'exploitation' refers to leveraging something that has already been discovered or found to be valuable, as opposed to 'exploration,' which involves searching and discovering new opportunities..."*
+  - Session Verification: `GET /api/v1/sessions/{id}` confirmed all message turns persisted in chronological order.
 
 ---
 
 ### Scenario C — Unsupported Out-of-Domain Turn
-- **Endpoint:** `POST /api/v1/sessions/b86abc5c-3e03-41aa-bbb3-07c53f60ac94/messages` (`stream: false`)
+- **Endpoint:** `POST /api/v1/sessions/d12d5d8d-cb71-419b-a8e2-88759c3bb360/messages` (`stream: false`)
 - **Query:** `"According to the Lenny Podcast transcripts, what is quantum chromodynamics in lattice gauge theory?"`
+- **Execution:** Pi Coding Agent invoked `transcript_retrieval` $\to$ GroundingGate returned `Insufficient` (score 0.4492 < 0.65) $\to$ Pi received `NO_GROUNDED_EVIDENCE` directive $\to$ synthesized honest refusal.
 - **Result:**
   - Status: 200 OK
-  - Latency: `269ms` (instant deterministic refusal, LLM synthesis bypassed)
-  - Grounding Tier: `Insufficient` (`can_synthesize: false`, score 0.5646 < 0.65)
-  - Content: *"I could not find guidance on this topic in Lenny's Podcast transcripts. The transcripts focus on product management, growth, and company building from Lenny's interviews..."*
+  - Grounding Tier: `Insufficient` (`can_synthesize: false`, score 0.4492)
+  - Agent: `pi-coding-agent`
+  - Content: *"Unfortunately, I do not have enough information to provide the definition of quantum chromodynamics in lattice gauge theory according to the Lenny Podcast transcripts."*
   - Sources: `[]` (zero fabricated citations).
 
 ---
 
 ### Scenario D — Cloud Provider Integration & Validation
-- **Anthropic Provider:** Implemented with official `anthropic` Python SDK (`AsyncAnthropic`).
-- **Configuration Enforcement:** Verified that initializing Anthropic without `ANTHROPIC_API_KEY` raises `ProviderConfigurationError: Anthropic API key is not configured. Set the ANTHROPIC_API_KEY environment variable or update your .env configuration when using LLM_PROVIDER=anthropic.`
+- **Anthropic Provider:** Implemented with official `anthropic` Python SDK (`AsyncAnthropic`) and registered in Pi ModelRuntime.
+- **Configuration Enforcement:** Verified that initializing Anthropic without `ANTHROPIC_API_KEY` raises `ProviderConfigurationError`. Zero silent fallback to Ollama is permitted.
+
+---
+
+### Scenario E — Real-Time SSE Token Streaming
+- **Endpoint:** `POST /api/v1/sessions/0868d122-2fb5-4369-bc9d-fa740675ef4c/messages` (`stream: true`)
+- **Events Emitted:**
+  - `event: thinking` (status: processing, query, agent: pi-coding-agent)
+  - `event: thinking` (status: retrieving, tool: transcript_retrieval)
+  - `event: evidence` (tier, score, can_synthesize)
+  - `event: delta` (streamed token by token from Pi)
+  - `event: done` (final message metadata)
 - **Live Cloud Status:** `ANTHROPIC_API_KEY` is not present in the runtime container environment. As required by protocol, live external Anthropic API execution was NOT executed, and no fake success was claimed. The provider abstraction, message translation, streaming, and error handling are fully unit-tested with mocks.
 
 ---

@@ -15,7 +15,7 @@ updated: 2026-09-14T14:00:00Z
 ## Validation Status Boundary
 
 ```
-VALIDATED BY SPIKE & PHASES P0.1–P0.5
+VALIDATED BY SPIKE & PHASES P0.1–P0.5A
 ─────────────────────────────────────────────
 • Multi-container development stack (FastAPI + PostgreSQL 16 + pgvector + Ollama)
 • Speaker-aware semantic chunker (~600 tokens, 100 overlap) and 768-dim embeddings
@@ -24,17 +24,18 @@ VALIDATED BY SPIKE & PHASES P0.1–P0.5
 • Deterministic Grounding Gate (Strong >= 0.78, Limited [0.65, 0.78), Conflicting, Insufficient < 0.65)
 • Pi 0.85.1 headless SDK runtime + Ollama (llama3.1:8b) cognitive synthesis
 • Project-local custom retrieval tool extension (`transcript_retrieval.ts`) via defineTool
+• Production stdio JSON-RPC 2.0 Pi bridge daemon (`backend/app/agent/bridge_daemon.mjs` ↔ `backend/app/agent/pi_bridge.py`)
+• Production QnAOrchestrator routing turns genuinely through Pi agent runtime (direct provider calls eliminated)
 • End-to-end tool invocation, pgvector query, and GroundingGate preservation
 • Source-grounded answer generation with Ada Chen Rekhi citation
 • Deterministic refusal enforcement on Insufficient evidence (NO_GROUNDED_EVIDENCE)
-• Clean session lifecycle via session.dispose() with 0 orphan processes
+• Clean session and process lifecycle with zero orphan processes and automatic recovery
 • PostgreSQL session and message persistence layer (`sessions`, `messages`, `source_references`)
 • Bounded working context window ($N=6$ messages) for deterministic history injection
 • Conversation-aware query rewriting resolving pronouns and context without hallucinations
 • Decoupled generation provider abstraction (`OllamaGenerationProvider`, `AnthropicGenerationProvider`)
 • Strict provider configuration validation with zero silent model fallbacks
 • Post-generation citation validation verifying cited chunks against retrieved evidence
-• Production QnAOrchestrator coordinating rewriter, retrieval, GroundingGate, LLM, validator, and persistence
 • Server-Sent Events (SSE) real-time streaming endpoint (`POST /api/v1/sessions/{id}/messages`)
 • Multi-turn conversational Q&A tested against live transcripts (supported, follow-up, refusal)
 
@@ -49,7 +50,7 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 • Full transcript ingestion throughput and storage
 ```
 
-> **Critical Integration Gate:** Phase P0.4 completed the integration validation spike of Pi 0.85.1 + Ollama + custom retrieval tool + P0.3 Grounding Gate; Phase P0.5 hardened this into the production backend Q&A engine.
+> **Critical Integration Gate:** Phase P0.4 completed the integration validation spike of Pi 0.85.1 + Ollama + custom retrieval tool + P0.3 Grounding Gate; Phase P0.5 / P0.5A hardened this into the production backend Q&A engine with Pi as the authoritative agent runtime.
 
 ---
 
@@ -61,8 +62,8 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 - [x] **Full Source Provenance:** Verified citations (episode number, guest, title, verbatim quote) attached to every retrieved evidence item (P0.3, P0.5).
 - [x] **Deterministic Refusal:** Out-of-domain and ungrounded queries refused deterministically via Grounding Gate ($S < 0.65$) without calling the LLM (P0.3, P0.4, P0.5).
 - [x] **Session Context & Isolation:** PostgreSQL-backed sessions preserving multi-turn context for follow-up questions while isolating independent chats (P0.5).
-- [x] **Validated Pi Integration:** Proven end-to-end integration between Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, and clean process lifecycle (P0.4, P0.5).
-- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, and persistence (66 passed).
+- [x] **Validated Pi Integration:** Proven end-to-end integration between Pi 0.85.1, custom retrieval tool, P0.3 Grounding Gate, and clean process lifecycle (P0.4, P0.5, P0.5A).
+- [x] **Automated Test Suite:** `pytest` suite verifying critical endpoints, retrieval, grounding gate, provider toggle, persistence, and Pi bridge daemon (70 passed).
 
 ---
 
@@ -157,26 +158,31 @@ NOT YET VALIDATED (IMPLEMENTATION-RISK ITEMS)
 
 ---
 
-### Phase P0.5: Model Providers, Session Management & Multi-Turn Grounded Q&A
+### Phase P0.5 / P0.5A: Model Providers, Session Management & Multi-Turn Grounded Q&A
 **Status:** ✅ Complete  
-**Objective:** Deliver end-to-end multi-turn grounded conversational Q&A with model provider switching, conversation-aware query rewriting, deterministic grounding enforcement, citation validation, and persistent PostgreSQL session storage.  
+**Objective:** Deliver end-to-end multi-turn grounded conversational Q&A with model provider switching, conversation-aware query rewriting, deterministic grounding enforcement, citation validation, persistent PostgreSQL session storage, and Pi Coding Agent as the authoritative production agent runtime.  
 **Depends on:** Phase P0.4  
-**Requirements:** REQ-06, REQ-11, REQ-12, REQ-13, NFR-07  
+**Requirements:** REQ-06, REQ-10, REQ-11, REQ-12, REQ-13, CON-03, NFR-07  
 
 **Plans:**
 - [x] Plan P0.5: Model Providers, Session Management & Multi-Turn Grounded Q&A (Completed 2026-09-14)
+- [x] Plan P0.5A: Targeted Architectural Correction — Production Pi Agent Integration (Completed 2026-09-14)
 
 **Key Deliverables:**
+- Container Node.js 22 runtime and global `@earendil-works/pi-coding-agent@0.85.1` install.
+- Production stdio JSON-RPC 2.0 Pi bridge daemon (`backend/app/agent/bridge_daemon.mjs`) with stderr logging redirection.
+- Python `PiBridgeClient` (`backend/app/agent/pi_bridge.py`) with lifecycle management and `asyncio.Lock()` serialization.
+- Production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`) routing turn execution and token streaming through Pi agent runtime (direct LLM provider generation calls eliminated).
+- Project-local Pi `transcript_retrieval` tool delegating to authoritative P0.3 `/api/v1/retrieval/search` endpoint and GroundingGate.
 - PostgreSQL session and message persistence layer (`backend/app/sessions/store.py`, `models.py`) with `sessions`, `messages`, and `source_references` tables.
-- Bounded working context window ($N=6$ messages) for deterministic history injection into query rewriter and prompt synthesis.
+- Bounded working context window ($N=6$ messages) for deterministic history injection into query rewriter and Pi agent turns.
 - Conversation-aware query rewriting (`backend/app/retrieval/rewriter.py`) resolving pronouns and context across turns without adding unsupported facts.
 - Decoupled `GenerationProvider` abstraction (`backend/app/providers/`): `OllamaGenerationProvider` (`llama3.1:8b`) as default local provider; `AnthropicGenerationProvider` (`claude-3-5-sonnet-20241022`) via official Anthropic SDK with strict error handling on missing credentials (zero silent fallback).
 - Deterministic post-generation `CitationValidator` (`backend/app/agent/citation.py`) verifying cited chunks against retrieved evidence.
-- Production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`) unifying context, query rewriting, pgvector retrieval, GroundingGate triage, LLM synthesis, citation validation, and persistence. Enforces fast deterministic refusal on `Insufficient` tier (< 0.65, latency < 300ms).
 - FastAPI endpoints for session lifecycle (`POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`) and conversational Q&A (`POST /api/v1/sessions/{id}/messages`) supporting both JSON and SSE streaming (`text/event-stream`).
-- Automated tests: 22 new unit and integration tests (66 passed backend total).
+- Automated tests: 26 unit and integration tests across persistence, rewriter, providers, citations, API, and Pi bridge daemon (70 passed backend total).
 
-**Verification:** Validated multi-turn live conversation against ingested transcripts: Scenario A (supported query with Strong tier), Scenario B (follow-up query with pronoun resolution), Scenario C (out-of-domain query with Insufficient refusal in 269ms), Scenario D (Anthropic provider configuration error and unit tests), and Scenario E (real-time SSE streaming). All 66 tests passing in 1.93s.
+**Verification:** Validated multi-turn live conversation against ingested transcripts: Scenario A (supported query with Ada Chen Rekhi citation via Pi), Scenario B (follow-up query with pronoun resolution via Pi), Scenario C (out-of-domain query with Insufficient refusal via Pi in 269ms with 0 citations), Scenario D (Anthropic provider configuration error and unit tests), Scenario E (real-time SSE streaming from Pi), and clean process lifecycle audit (0 orphan Node processes). All 70 tests passing in 2.35s.
 
 ---
 

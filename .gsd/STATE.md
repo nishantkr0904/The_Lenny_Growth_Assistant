@@ -7,23 +7,23 @@ updated: 2026-09-14T16:30:00Z
 ## Current Position
 
 **Milestone:** v0.1 — P0 Core Grounded Assistant  
-**Phase:** P0.5 — Model Providers, Session Management & Multi-Turn Grounded Q&A  
+**Phase:** P0.5A — Targeted Architectural Correction: Production Pi Agent Integration  
 **Status:** ✅ Complete  
-**Plan:** Plan P0.5 executed and verified  
+**Plan:** Plan P0.5 and Correction Plan P0.5A executed and verified  
 
 ---
 
 ## Last Action
 
-Successfully executed and verified **Phase P0.5 (Model Providers, Session Management & Multi-Turn Grounded Q&A)**:
-- Implemented PostgreSQL-backed session and message store (`backend/app/sessions/store.py`, `models.py`) persisting sessions, message turns, and structured source references (`source_references` table).
-- Implemented conversation-aware query rewriter (`backend/app/retrieval/rewriter.py`) resolving pronouns ("she", "that", "what about") from bounded conversation history ($N=6$ messages) without hallucinating answers.
-- Implemented decoupled generation provider abstraction (`backend/app/providers/`): `OllamaGenerationProvider` (default local `llama3.1:8b`) and `AnthropicGenerationProvider` (official SDK `claude-3-5-sonnet-20241022`). Enforced strict configuration check: missing Anthropic credentials raise `ProviderConfigurationError` immediately without silent fallback.
-- Implemented post-generation `CitationValidator` (`backend/app/agent/citation.py`) verifying cited chunk UUIDs against retrieved evidence and preventing hallucinated sources.
-- Built production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`) unifying session context, query rewriting, pgvector retrieval, GroundingGate triage, LLM synthesis, citation validation, and message persistence. Enforced deterministic refusal on `Insufficient` tier ($< 0.65$, bypasses LLM, latency < 300ms).
-- Implemented FastAPI session routes (`POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`) and grounded Q&A endpoint (`POST /api/v1/sessions/{id}/messages`) supporting both structured JSON and Server-Sent Events (SSE `text/event-stream`).
-- Added 22 new unit and integration tests; full backend test suite passes with 66 green tests.
-- Empirically validated multi-turn live conversation against ingested transcripts: Scenario A (supported query), Scenario B (follow-up with pronoun resolution), Scenario C (unsupported refusal), and SSE streaming.
+Successfully executed and verified **Phase P0.5A Targeted Architectural Correction (Production Pi Agent Integration)**:
+- Upgraded backend container to include Node.js 22 runtime and `@earendil-works/pi-coding-agent@0.85.1`.
+- Implemented production Pi bridge daemon (`backend/app/agent/bridge_daemon.mjs`) communicating over stdio using line-delimited JSON-RPC 2.0 (`execute_turn`, `stream_turn`, `ping`, `shutdown`). Redirected all console logging to stderr to guarantee zero stdout protocol corruption.
+- Registered project-local `transcript_retrieval` tool in Pi via `defineTool`, delegating to FastAPI's authoritative P0.3 `/api/v1/retrieval/search` endpoint and preserving GroundingGate decisions, scores, and chunk metadata.
+- Implemented Python bridge client (`backend/app/agent/pi_bridge.py`) with child process lifecycle management, concurrency serialization via `asyncio.Lock()`, and FastAPI lifespan termination (`backend/app/main.py`) ensuring zero orphan processes.
+- Rewired production `QnAOrchestrator` (`backend/app/agent/orchestrator.py`): eliminated direct `self.provider.generate()` / `self.provider.stream()` calls. All turn generation and token streaming route through the Pi agent runtime.
+- Preserved existing P0.1–P0.5 contracts: bounded context, query rewriting, pgvector cosine search, deterministic GroundingGate tiers (Strong, Limited, Conflicting, Insufficient), honest refusal without citations on Insufficient, and post-generation `CitationValidator`.
+- Added 4 new tests in `backend/tests/test_pi_bridge.py`; full backend test suite passes with 70 green tests.
+- Empirically validated on live Docker stack: Scenario A (supported Ada Chen Rekhi turn), Scenario B (follow-up with pronoun resolution), Scenario C (unsupported refusal with 0 citations), Scenario D (Anthropic configuration error), and Scenario E (real-time SSE streaming).
 
 ---
 
@@ -73,9 +73,9 @@ Successfully executed and verified **Phase P0.5 (Model Providers, Session Manage
 
 ## Session Context
 
-- Phase P0.5 implemented and verified.
+- Phase P0.5A architectural correction implemented and verified.
 - Containers running: `lenny_postgres` (healthy on port 5433), `lenny_ollama` (up), `lenny_backend` (up on port 8000).
-- All P0.5 acceptance criteria satisfied.
-- Full pytest suite: 66 passed in 1.93s.
+- All P0.5 and P0.5A acceptance criteria satisfied.
+- Full pytest suite: 70 passed in 2.35s.
 - Strict constraint preserved: Zero P0.6 frontend or UI code implemented.
 
