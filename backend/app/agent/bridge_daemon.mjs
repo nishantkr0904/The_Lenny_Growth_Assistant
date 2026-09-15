@@ -56,6 +56,16 @@ async function loadPiSdk() {
 
 await loadPiSdk();
 
+const LENNY_SYSTEM_PROMPT =
+  "You are the Lenny Growth Assistant, an authoritative AI assistant answering questions about product management, growth, and company building based STRICTLY on transcripts from Lenny's Podcast.\n\n" +
+  "CORE OPERATIONAL MANDATES:\n" +
+  "1. ALWAYS call the `transcript_retrieval` tool to retrieve evidence before formulating an answer. Do NOT answer from memory or general knowledge.\n" +
+  "2. ANSWER ONLY WHAT WAS ASKED: Address the specific user question directly. Do not generate tangential lists, unsolicited frameworks, or generic takeaways.\n" +
+  "3. STRICT EVIDENCE BOUNDING: Every factual claim must be directly supported by explicit statements in the retrieved transcript chunks. Never extrapolate, speculate, or introduce concepts, metrics, or frameworks (such as north-star metrics or unmentioned tactics) not found in the excerpts.\n" +
+  "4. CONCISE SYNTHESIS OVER ARTIFICIAL LISTS: Prefer a clear, concise 1-2 paragraph synthesis (or 2-3 tightly grounded bullet points if summarizing distinct points) directly citing the speaker/guest and episode. Never manufacture an arbitrary multi-item list (e.g. 7 takeaways) when the evidence only supports fewer core points.\n" +
+  "5. INSUFFICIENT EVIDENCE: If the retrieved evidence is insufficient, or if the topic is not discussed in the transcripts, refuse plainly and state that there is no information on this topic in Lenny's Podcast transcripts. Make zero claims.\n" +
+  "6. Maintain full provenance: mention the guest's name and episode title.";
+
 function ensureModelsConfig() {
   const configDir = process.env.HOME ? `${process.env.HOME}/.pi/agent` : "/root/.pi/agent";
   try {
@@ -78,6 +88,7 @@ function ensureModelsConfig() {
     };
 
     fs.writeFileSync(modelsPath, JSON.stringify({ ...existing, providers }, null, 2));
+    fs.writeFileSync(`${configDir}/SYSTEM.md`, LENNY_SYSTEM_PROMPT, "utf8");
     console.error(`[PI BRIDGE] Configured models.json with Ollama at ${ollamaBaseUrl}`);
   } catch (err) {
     console.error("[PI BRIDGE] Warning: could not write models.json:", err.message);
@@ -117,6 +128,7 @@ function sendError(id, code, message, data = null) {
 // Tool tracking for current turn
 let currentTurnEvidence = [];
 let currentTurnDecision = null;
+let currentTurnRewrittenQuery = null;
 
 const RETRIEVAL_URL = process.env.INTERNAL_RETRIEVAL_URL || "http://localhost:8000/api/v1/retrieval/search";
 
@@ -139,15 +151,22 @@ const transcriptRetrievalTool = defineTool({
   }),
 
   async execute(_toolCallId, params) {
-    console.error(`[PI TOOL] Executing transcript_retrieval query="${params.query}" (top_k=${params.top_k || 5})`);
-    sendNotification("tool_call", { name: "transcript_retrieval", query: params.query });
+    const hasPronouns = /\b(she|he|they|her|his|them|it|that)\b/i.test(params.query);
+    let targetQuery = params.query;
+    if (hasPronouns && currentTurnRewrittenQuery && currentTurnRewrittenQuery !== params.query) {
+      console.error(`[PI TOOL] Rewriting pronoun query "${params.query}" -> "${currentTurnRewrittenQuery}"`);
+      targetQuery = currentTurnRewrittenQuery;
+    }
+
+    console.error(`[PI TOOL] Executing transcript_retrieval query="${targetQuery}" (top_k=${params.top_k || 5})`);
+    sendNotification("tool_call", { name: "transcript_retrieval", query: targetQuery });
 
     try {
-      const res = await fetch(RETRIEVAL_URL, {
+      let res = await fetch(RETRIEVAL_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: params.query,
+          query: targetQuery,
           top_k: params.top_k || 5,
         }),
       });
@@ -160,10 +179,35 @@ const transcriptRetrievalTool = defineTool({
         };
       }
 
-      const data = await res.json();
-      const decision = data.decision;
+      let data = await res.json();
+      let decision = data.decision;
+
+      // If initial query yielded Insufficient and we have a rewritten query anchor, retry
+      if (
+        (!decision.can_synthesize || decision.tier === "Insufficient") &&
+        currentTurnRewrittenQuery &&
+        targetQuery !== currentTurnRewrittenQuery
+      ) {
+        console.error(`[PI TOOL] Initial query yielded Insufficient; retrying with resolved query "${currentTurnRewrittenQuery}"`);
+        const retryRes = await fetch(RETRIEVAL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: currentTurnRewrittenQuery,
+            top_k: params.top_k || 5,
+          }),
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          if (retryData.decision && retryData.decision.can_synthesize) {
+            data = retryData;
+            decision = data.decision;
+          }
+        }
+      }
+
       currentTurnDecision = decision;
-      currentTurnEvidence = decision.selected_evidence || [];
+      currentTurnEvidence = decision.can_synthesize ? (decision.selected_evidence || []) : [];
 
       sendNotification("tool_result", {
         tier: decision.tier,
@@ -173,6 +217,7 @@ const transcriptRetrievalTool = defineTool({
       });
 
       if (!decision.can_synthesize || decision.tier === "Insufficient") {
+        currentTurnEvidence = [];
         return {
           content: [
             {
@@ -183,6 +228,7 @@ const transcriptRetrievalTool = defineTool({
                 `    NO_GROUNDED_EVIDENCE: The query is not covered in Lenny's Podcast transcripts.\n` +
                 `    You are strictly FORBIDDEN from using general knowledge or guessing.\n` +
                 `    You MUST inform the user that this topic is not discussed in Lenny's Podcast transcripts.\n` +
+                `    Do not invent or cite any sources.\n` +
                 `  </system_directive>\n` +
                 `</retrieved_evidence>`,
             },
@@ -210,12 +256,17 @@ const transcriptRetrievalTool = defineTool({
       const validXml =
         `<retrieved_evidence status="VALID" tier="${decision.tier}" top_score="${decision.top_score}">\n` +
         `  <system_directive>\n` +
-        `    Use ONLY the factual information in the chunks below.\n` +
-        `    Attribute factual claims to the speaker/guest and reference the episode title.\n` +
+        `    GROUNDING & SYNTHESIS RULES:\n` +
+        `    - Directly answer the user's specific question using only the explicit facts in the chunks below.\n` +
+        `    - Do NOT invent, extrapolate, or manufacture lists of takeaways merely because they appear in related chunks.\n` +
+        `    - If the user asks why something is important, synthesize why the guest says it is important in a concise, coherent explanation (1-2 paragraphs). Do not add a long list of implementation details or tactics.\n` +
+        `    - Every claim you make must be directly backed by the excerpts.\n` +
+        `    - Attribute insights directly to the speaker/guest and episode title.\n` +
         `  </system_directive>\n` +
         conflictDirective +
         `${chunksXml}\n` +
         `</retrieved_evidence>`;
+
 
       return {
         content: [{ type: "text", text: validXml }],
@@ -235,6 +286,7 @@ async function executeTurn(params) {
 
   currentTurnEvidence = [];
   currentTurnDecision = null;
+  currentTurnRewrittenQuery = rewritten_query || null;
 
   const runtime = await ModelRuntime.create();
   let model;
@@ -271,6 +323,10 @@ async function executeTurn(params) {
     sessionManager: SessionManager.inMemory(),
   });
 
+  if (session.agent && session.agent.state) {
+    session.agent.state.systemPrompt = LENNY_SYSTEM_PROMPT;
+  }
+
   let accumulatedText = "";
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
@@ -284,11 +340,13 @@ async function executeTurn(params) {
     // Format prompt with context and rewritten query if available
     let turnPrompt = user_prompt;
     if (rewritten_query && rewritten_query !== user_prompt) {
-      turnPrompt = `User Question: ${user_prompt}\n(Search Topic: ${rewritten_query})`;
+      turnPrompt = `User Question: ${user_prompt}\nSearch Query: ${rewritten_query}\n(Note: Retrieve transcript evidence using '${rewritten_query}')`;
     }
+    turnPrompt += "\n\nProvide a concise, evidence-grounded answer directly addressing what was asked. Do NOT invent unrequested lists of takeaways.";
 
     console.error(`[PI AGENT] Invoking Pi session with model ${model.provider}/${model.id}...`);
     await session.prompt(turnPrompt);
+
 
     return {
       response: accumulatedText,
@@ -304,6 +362,7 @@ async function executeTurn(params) {
     session.dispose();
   }
 }
+
 
 // JSON-RPC Request Processing via stdin
 const rl = readline.createInterface({

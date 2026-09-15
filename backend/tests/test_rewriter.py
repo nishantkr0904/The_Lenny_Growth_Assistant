@@ -74,3 +74,28 @@ async def test_followup_query_provider_rewrite():
 
     assert mock_provider.generate.called
     assert result == "Ada Chen Rekhi decision to leave her job"
+
+
+@pytest.mark.asyncio
+async def test_lauryn_isford_pronoun_followup_regression():
+    """
+    Regression Test (Issue 2):
+    First query: 'What does Lauryn Isford say about onboarding?'
+    Follow-up query: 'Why does she think onboarding is important?'
+    Verify 'she' resolves to 'Lauryn Isford' and pronoun is eliminated.
+    """
+    rewriter = ConversationQueryRewriter()
+    history = [
+        _make_msg("user", "What does Lauryn Isford say about onboarding?"),
+        _make_msg(
+            "assistant",
+            "Lauryn Isford, Head of Growth at Airtable, discusses how onboarding is that first really important choke point.",
+        ),
+    ]
+    query = "Why does she think onboarding is important?"
+    rewritten = await rewriter.rewrite(query, history=history)
+
+    assert "Lauryn Isford" in rewritten
+    assert "she" not in rewritten.lower().split()
+    assert rewritten == "Why does Lauryn Isford think onboarding is important?"
+

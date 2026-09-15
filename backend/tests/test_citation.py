@@ -99,3 +99,77 @@ def test_citation_validation_insufficient_refusal():
     assert result.is_valid is True
     assert len(result.validated_sources) == 0
     assert len(result.warnings) == 0
+
+
+def test_citation_validation_refusal_with_candidate_chunks_returns_zero_sources():
+    """
+    Regression Test (Issue 1):
+    Verify that an out-of-domain refusal like quantum chromodynamics returns exactly ZERO sources,
+    even if low-similarity candidate chunks are passed in retrieved_evidence.
+    """
+    unrelated_chunks = [
+        _make_evidence(
+            chunk_id="11111111-2222-3333-4444-555555555555",
+            guest="Chandra Janakiraman",
+            title="An operator's guide to product strategy",
+            excerpt="Product strategy requires identifying the core lever.",
+            score=0.7045,
+        ),
+        _make_evidence(
+            chunk_id="22222222-3333-4444-5555-666666666666",
+            guest="Jonny Miller",
+            title="Managing nerves, anxiety, and burnout",
+            excerpt="Nervous system mastery helps with burnout.",
+            score=0.7014,
+        ),
+    ]
+
+    refusal_text = "There is no information about quantum chromodynamics in Lenny's Podcast."
+
+    # Test under both Insufficient tier and refusal text
+    result_insufficient = CitationValidator.validate_and_extract(
+        response_text=refusal_text,
+        retrieved_evidence=unrelated_chunks,
+        can_synthesize=False,
+        tier=GroundingTier.INSUFFICIENT,
+    )
+    assert result_insufficient.is_valid is True
+    assert len(result_insufficient.validated_sources) == 0
+    assert len(result_insufficient.cited_chunk_ids) == 0
+
+    # Test where response text is a refusal even if tier was Limited
+    result_refusal_text = CitationValidator.validate_and_extract(
+        response_text=refusal_text,
+        retrieved_evidence=unrelated_chunks,
+        can_synthesize=True,
+        tier=GroundingTier.LIMITED,
+    )
+    assert result_refusal_text.is_valid is True
+    assert len(result_refusal_text.validated_sources) == 0
+    assert len(result_refusal_text.cited_chunk_ids) == 0
+
+
+def test_citation_validation_unrelated_chunk_overlap_prevention():
+    """
+    Regression Test (Issue 3):
+    Verify that candidate chunks without substantive vocabulary overlap or guest mention
+    are not blindly attached as evidence.
+    """
+    chunk = _make_evidence(
+        chunk_id="33333333-4444-5555-6666-777777777777",
+        guest="Brian Balfour",
+        title="Four Growth Loops",
+        excerpt="Retention is the output of product market fit and acquisition loops.",
+        score=0.72,
+    )
+    # Generic response that does not mention Balfour or any Balfour concepts
+    unrelated_text = "The organization should consider various unrelated factors."
+
+    result = CitationValidator.validate_and_extract(
+        response_text=unrelated_text,
+        retrieved_evidence=[chunk],
+        can_synthesize=True,
+        tier=GroundingTier.LIMITED,
+    )
+    assert len(result.validated_sources) == 0
+

@@ -143,18 +143,27 @@ class QnAOrchestrator:
             tier=tier_enum,
         )
 
+        # Refusal turns or insufficient evidence must strictly be Insufficient tier with zero sources
+        is_refusal = len(cit_result.validated_sources) == 0 and (
+            tier_enum == GroundingTier.INSUFFICIENT
+            or not pi_result.can_synthesize
+            or any(w in pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+        )
+        effective_tier = "Insufficient" if is_refusal else pi_result.tier
+        effective_can_synthesize = False if is_refusal else pi_result.can_synthesize
+
         # 9. Persist assistant message and source references
         asst_msg = await SessionStore.save_message(
             db=db,
             session_id=session_id,
             role="assistant",
             content=pi_result.content,
-            evidence_tier=pi_result.tier,
+            evidence_tier=effective_tier,
             latency_ms=elapsed_ms,
             model_used=pi_result.model_used,
         )
 
-        if cit_result.validated_sources:
+        if cit_result.validated_sources and not is_refusal:
             await SessionStore.save_source_references(db, asst_msg.id, cit_result.validated_sources)
 
         return QnAResult(
@@ -163,15 +172,16 @@ class QnAOrchestrator:
             role="assistant",
             content=pi_result.content,
             grounding={
-                "tier": pi_result.tier,
-                "can_synthesize": pi_result.can_synthesize,
-                "top_score": pi_result.top_score,
+                "tier": effective_tier,
+                "can_synthesize": effective_can_synthesize,
+                "top_score": pi_result.top_score if not is_refusal else 0.0,
                 "agent": "pi-coding-agent",
             },
-            sources=cit_result.validated_sources,
+            sources=[] if is_refusal else cit_result.validated_sources,
             latency_ms=elapsed_ms,
             model_used=pi_result.model_used,
         )
+
 
     async def stream_turn(
         self,
@@ -294,8 +304,18 @@ class QnAOrchestrator:
             tier=tier_enum,
         )
 
-        for src in cit_result.validated_sources:
-            yield f"event: citation\ndata: {json.dumps(src.model_dump())}\n\n"
+        # Refusal turns or insufficient evidence must strictly be Insufficient tier with zero sources
+        is_refusal = len(cit_result.validated_sources) == 0 and (
+            tier_enum == GroundingTier.INSUFFICIENT
+            or not final_pi_result.can_synthesize
+            or any(w in final_pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+        )
+        effective_tier = "Insufficient" if is_refusal else final_pi_result.tier
+        effective_can_synthesize = False if is_refusal else final_pi_result.can_synthesize
+
+        if not is_refusal:
+            for src in cit_result.validated_sources:
+                yield f"event: citation\ndata: {json.dumps(src.model_dump())}\n\n"
 
         # 7. Persist assistant message
         asst_msg = await SessionStore.save_message(
@@ -303,21 +323,22 @@ class QnAOrchestrator:
             session_id=session_id,
             role="assistant",
             content=final_pi_result.content,
-            evidence_tier=final_pi_result.tier,
+            evidence_tier=effective_tier,
             latency_ms=elapsed_ms,
             model_used=final_pi_result.model_used,
         )
 
-        if cit_result.validated_sources:
+        if cit_result.validated_sources and not is_refusal:
             await SessionStore.save_source_references(db, asst_msg.id, cit_result.validated_sources)
 
         done_payload = {
             "message_id": asst_msg.id,
             "session_id": session_id,
             "latency_ms": elapsed_ms,
-            "tier": final_pi_result.tier,
-            "can_synthesize": final_pi_result.can_synthesize,
-            "sources": [s.model_dump() for s in cit_result.validated_sources],
+            "tier": effective_tier,
+            "can_synthesize": effective_can_synthesize,
+            "sources": [] if is_refusal else [s.model_dump() for s in cit_result.validated_sources],
             "agent": "pi-coding-agent",
         }
         yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+

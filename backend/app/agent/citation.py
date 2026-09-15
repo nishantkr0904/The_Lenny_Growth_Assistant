@@ -17,6 +17,18 @@ logger = logging.getLogger("lenny_assistant.agent.citation")
 UUID_REGEX = re.compile(r"\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b", re.IGNORECASE)
 
 
+REFUSAL_PATTERNS = [
+    re.compile(r"\bno\s+(?:relevant\s+)?information\b", re.IGNORECASE),
+    re.compile(r"\bnot\s+(?:covered|discussed|mentioned|found)\b", re.IGNORECASE),
+    re.compile(r"\bcould\s+not\s+find\b", re.IGNORECASE),
+    re.compile(r"\bunable\s+to\s+find\b", re.IGNORECASE),
+    re.compile(r"\bnot\s+contain\s+(?:any\s+)?information\b", re.IGNORECASE),
+    re.compile(r"\btranscripts?\s+(?:do\s+not|does\s+not)\s+(?:contain|mention|discuss)\b", re.IGNORECASE),
+    re.compile(r"\bthere\s+is\s+no\s+(?:record|mention|information)\b", re.IGNORECASE),
+    re.compile(r"\bdoes\s+not\s+(?:discuss|mention|cover)\b", re.IGNORECASE),
+]
+
+
 class CitationValidationResult(BaseModel):
     """Result payload from citation validation."""
 
@@ -41,21 +53,25 @@ class CitationValidator:
     ) -> CitationValidationResult:
         """
         Validate cited sources in response text against the retrieved evidence set.
+        Guarantees zero sources are returned if the tier is Insufficient, synthesis is disallowed,
+        or the response text expresses an explicit refusal.
         """
-        # Case 1: Insufficient grounding tier (Refusal turn)
-        if not can_synthesize or tier == GroundingTier.INSUFFICIENT:
-            # Check if model fabricated UUIDs/citations despite refusal directive
+        is_refusal_text = any(p.search(response_text) for p in REFUSAL_PATTERNS)
+
+        # Case 1: Insufficient grounding tier, synthesis disallowed, or refusal response
+        if not can_synthesize or tier == GroundingTier.INSUFFICIENT or is_refusal_text:
+            # Check if model fabricated UUIDs/citations despite refusal
             fabricated_uuids = UUID_REGEX.findall(response_text)
             if fabricated_uuids:
                 logger.warning(
-                    "Model response contains chunk IDs during Insufficient tier: %s",
+                    "Model response contains chunk IDs during refusal/Insufficient tier: %s",
                     fabricated_uuids,
                 )
                 return CitationValidationResult(
                     is_valid=False,
                     validated_sources=[],
                     cited_chunk_ids=fabricated_uuids,
-                    warnings=["Model fabricated source IDs on an Insufficient evidence turn."],
+                    warnings=["Model fabricated source IDs on an Insufficient/refusal evidence turn."],
                 )
             return CitationValidationResult(
                 is_valid=True,
@@ -63,6 +79,7 @@ class CitationValidator:
                 cited_chunk_ids=[],
                 warnings=[],
             )
+
 
         # Case 2: Synthesized response with candidate evidence
         valid_chunk_map = {str(item.chunk_id).lower(): item for item in retrieved_evidence}
@@ -111,11 +128,20 @@ class CitationValidator:
                 matched_chunks[chunk_key] = item
                 continue
 
-        # If model did not explicitly tag chunks, attach the top qualifying chunks
-        # that formed the factual basis for synthesis
+        # If model did not explicitly tag chunks, attach top qualifying chunks
+        # that formed the factual basis for synthesis (verifying substantive topical overlap)
         if not matched_chunks:
+            words_in_response = set(re.findall(r"\b[a-z]{4,}\b", lower_response))
             for item in retrieved_evidence[:3]:
-                matched_chunks[str(item.chunk_id).lower()] = item
+                chunk_words = set(re.findall(r"\b[a-z]{4,}\b", (item.excerpt or item.content or "").lower()))
+                substantive_overlap = (words_in_response & chunk_words) - {
+                    "this", "that", "with", "from", "have", "more", "what", "when", "about",
+                    "your", "they", "will", "would", "there", "their", "which", "could", "also",
+                    "podcast", "lenny", "episode", "transcript", "think", "said", "says"
+                }
+                if substantive_overlap or (item.guest and item.guest.lower() in lower_response):
+                    matched_chunks[str(item.chunk_id).lower()] = item
+
 
         # Build verified SourceReferenceItems
         validated_sources = [

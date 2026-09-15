@@ -73,12 +73,15 @@ def format_evidence_for_agent(response: RetrievalResponse) -> str:
         f"  </grounding_decision>\n"
         f"{conflict_note}"
         f"  <system_directive>\n"
-        f"    Use ONLY the factual information contained in the chunks below.\n"
+        f"    Use ONLY the explicit factual information contained in the chunks below.\n"
         f"    Attribute factual claims to the speaker/guest and reference the episode title.\n"
+        f"    Do NOT extrapolate, guess, or manufacture lists of unmentioned tactics, frameworks, or metrics.\n"
+        f"    Keep synthesis concise and strictly grounded in the excerpts.\n"
         f"  </system_directive>\n"
         f"{chunks_str}\n"
         f"</retrieved_evidence>"
     )
+
 
 
 async def execute_transcript_retrieval(

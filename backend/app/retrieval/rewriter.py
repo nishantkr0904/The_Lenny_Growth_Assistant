@@ -37,6 +37,41 @@ REWRITER_SYSTEM_PROMPT = (
 )
 
 
+REWRITER_STOP_WORDS = {
+    "the", "according", "when", "what", "how", "this", "that", "in", "for", "to", "from", "with", "about",
+    "head", "growth", "airtable", "vp", "director", "lead", "chief", "officer", "cpo", "ceo", "cto",
+    "founder", "co-founder", "product", "manager", "senior", "partner", "investor", "author", "episode",
+    "lenny", "podcast", "guest", "company", "startup", "teams", "team", "first", "second", "third"
+}
+
+
+def extract_primary_entity(history: list[MessageModel]) -> Optional[str]:
+    """Extract primary person or entity from recent user or assistant messages."""
+    # First search prior user questions in reverse (highest signal for what user asked about)
+    for msg in reversed(history):
+        if msg.role == "user":
+            multi = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", msg.content)
+            filtered = [m for m in multi if not any(w.lower() in REWRITER_STOP_WORDS for w in m.split())]
+            if filtered:
+                return filtered[0]
+
+    # Search all recent messages in reverse
+    for msg in reversed(history[-4:]):
+        multi = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", msg.content)
+        filtered = [m for m in multi if not any(w.lower() in REWRITER_STOP_WORDS for w in m.split())]
+        if filtered:
+            return filtered[0]
+
+    # Fallback to single proper nouns
+    for msg in reversed(history[-4:]):
+        singles = re.findall(r"\b[A-Z][a-z]+\b", msg.content)
+        filtered = [s for s in singles if s.lower() not in REWRITER_STOP_WORDS]
+        if filtered:
+            return filtered[0]
+
+    return None
+
+
 class ConversationQueryRewriter:
     """
     Transforms multi-turn conversational queries into standalone retrieval queries.
@@ -69,41 +104,33 @@ class ConversationQueryRewriter:
     @staticmethod
     def deterministic_rewrite(query: str, history: list[MessageModel]) -> str:
         """
-        Deterministic fallback rewriter that extracts salient entities and topics
-        from recent user/assistant turns to anchor the follow-up query.
+        Deterministic rewriter that resolves pronouns and anchors follow-up queries
+        using salient entities extracted from recent conversation turns.
         """
         if not history:
             return normalize_query(query)
 
-        # Look at the most recent user question and assistant answer
-        recent_contexts = []
-        for msg in reversed(history[-4:]):
-            content_snippet = msg.content[:300]
-            # Extract proper nouns or capitalized word sequences (potential guests/topics)
-            proper_nouns = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", content_snippet)
-            # Filter common sentence starters
-            salient = [
-                pn for pn in proper_nouns
-                if pn.lower() not in {"the", "according", "when", "what", "how", "this", "that", "in", "for", "to"}
-            ]
-            if salient:
-                recent_contexts.extend(salient)
+        entity = extract_primary_entity(history)
+        if not entity:
+            return normalize_query(query)
 
-        # Deduplicate while preserving order
-        seen = set()
-        deduped_entities = []
-        for ent in recent_contexts:
-            if ent.lower() not in seen:
-                seen.add(ent.lower())
-                deduped_entities.append(ent)
+        resolved = query
+        has_pronoun = bool(re.search(r"\b(she|he|they|her|his|their|him|them)\b", query, re.IGNORECASE))
+        if has_pronoun:
+            # Possessive pronoun replacement (e.g., 'her framework' -> 'Lauryn Isford\'s framework')
+            resolved = re.sub(r"\b(her|his|their)\b(?=\s+\w+)", f"{entity}'s", resolved, flags=re.IGNORECASE)
+            # Subject pronoun replacement (e.g., 'Why does she think' -> 'Why does Lauryn Isford think')
+            resolved = re.sub(r"\b(she|he|they)\b", entity, resolved, flags=re.IGNORECASE)
+            # Object pronoun replacement
+            resolved = re.sub(r"\b(her|him|them)\b", entity, resolved, flags=re.IGNORECASE)
+            return normalize_query(resolved)
 
-        if deduped_entities:
-            # Combine top 2 entities with the query
-            anchors = " ".join(deduped_entities[:2])
-            combined = f"{anchors} {query}"
-            return normalize_query(combined)
+        # If no pronoun was replaced and the entity isn't in the query, prepend as anchor
+        if entity.lower() not in resolved.lower():
+            resolved = f"{entity} {resolved}"
 
-        return normalize_query(query)
+        return normalize_query(resolved)
+
 
     async def rewrite(self, query: str, history: list[MessageModel]) -> str:
         """
