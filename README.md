@@ -1,431 +1,526 @@
 # The Lenny Growth Assistant
 
-An internal product and growth research assistant over a curated corpus of [Lenny's Podcast](https://www.lennyspodcast.com/) transcripts. It provides source-grounded answers, conversational follow-up research, and structured artifact generation — without requiring users to understand retrieval pipelines, prompting, or model infrastructure.
+An internal product and growth research assistant and structured artifact compiler built over the complete 303-episode transcript corpus of [Lenny's Podcast](https://www.lennyspodcast.com/).
 
-This is not a generic chatbot. Every answer is traceable to what was actually said on the podcast.
+The system provides source-grounded answers, conversational follow-up research, and structured deliverable generation (Ship 30 for 30 essays, Markdown executive briefs, and sandboxed HTML/CSS cards) — without requiring users to navigate transcript archives, prompt engineering, or model infrastructure.
+
+This is not a generic chatbot. The transcript corpus is the sole source of truth. Every claim is validated against retrieved excerpts with guest and episode citations. A deterministic mathematical GroundingGate evaluates evidence before synthesis, refusing unsupported queries with zero citations rather than hallucinating.
+
+---
+
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer"]
+        Browser["Browser (React 18 + Vite SPA :3000)"]
+    end
+
+    subgraph Backend ["Application & Orchestration Layer"]
+        FastAPI["FastAPI Orchestrator (:8000)"]
+        Gate["GroundingGate (Cosine Similarity Tiers)"]
+        Validator["CitationValidator (Proof Engine)"]
+    end
+
+    subgraph AgentRuntime ["Agent Runtime Layer"]
+        Bridge["PiBridgeClient (Python)"]
+        Daemon["bridge_daemon.mjs (stdio JSON-RPC)"]
+        PiAgent["Pi Coding Agent (0.85.1)"]
+        Tool["transcript_retrieval Tool"]
+    end
+
+    subgraph Storage ["Storage & Vector Layer"]
+        Postgres[("PostgreSQL 16 + pgvector<br/>303 Episodes · 12,014 Chunks · HNSW Index")]
+    end
+
+    subgraph Models ["Inference Providers"]
+        OllamaGen["Ollama: llama3.1:8b (Default Local Generation)"]
+        AnthropicGen["Anthropic: claude-3-5-sonnet (Configured Cloud Provider)"]
+        OllamaEmbed["Ollama: nomic-embed-text (Fixed 768-dim Embedding)"]
+    end
+
+    Browser -->|REST / Real-Time SSE Stream| FastAPI
+    FastAPI -->|Semantic Vector Search| Postgres
+    Postgres -.->|Generate Query Vector| OllamaEmbed
+    FastAPI -->|Evaluate Similarity| Gate
+    Gate -->|Strong / Limited Tier| Bridge
+    Gate -->|Insufficient Tier| FastAPI
+    Bridge <-->|stdio JSON-RPC| Daemon
+    Daemon <--> PiAgent
+    PiAgent --> Tool
+    Tool -->|Bounded Chunk Fetch| Postgres
+    PiAgent -->|Local Synthesis| OllamaGen
+    PiAgent -.->|Cloud Synthesis| AnthropicGen
+    FastAPI -->|Validate Grounding & Chunk IDs| Validator
+    FastAPI -->|Persist Sessions & Messages| Postgres
+```
 
 ---
 
 ## Why This Exists
 
-Lenny's Podcast is one of the richest publicly available sources of product and growth expertise — hundreds of episodes featuring practitioners from Airbnb, Slack, Figma, Stripe, and others. The problem is access and synthesis:
+Lenny's Podcast contains hundreds of hours of high-signal discussions with top practitioners from Airbnb, Stripe, Figma, Slack, and Uber. However, turning this archive into actionable strategy creates significant friction:
 
-- **Discovery is manual.** Finding which episode discussed "how to set up your first growth team" requires scrubbing through hours of recordings or hoping a search engine surfaces the right clip.
-- **Synthesis is labor-intensive.** Extracting a coherent answer from a conversational transcript — and cross-referencing it with what other guests said — takes significant effort.
-- **Reuse is fragile.** Sharing insights typically means copying quotes into a doc, losing attribution, and hoping the paraphrase is faithful.
+- **Discovery friction:** Locating specific tactics (e.g., pricing migrations, B2B onboarding loops, or founder-led sales) requires remembering titles, scrubbing audio, or relying on keyword search.
+- **Synthesis friction:** Reconciling conversational dialogue across multiple episodes — or contrasting conflicting viewpoints across guests — requires hours of manual cross-referencing.
+- **Reuse friction:** Converting podcast insights into team strategy memos or thought-leadership content usually strips attribution and risks accidental paraphrase errors.
 
-The Lenny Growth Assistant removes search friction, synthesis labor, and content creation overhead by grounding every response in the transcript corpus and making sources inspectable.
+The Lenny Growth Assistant eliminates these bottlenecks by grounding every answer in verbatim transcript chunks, maintaining multi-turn context, and compiling insights directly into presentation-ready deliverables.
 
 ---
 
 ## What It Does
 
-### Core Capabilities
-
-- **Source-grounded Q&A** — Ask product and growth questions; receive answers anchored exclusively in transcript evidence with episode and guest citations.
-- **Follow-up research** — Multi-turn sessions preserve conversational context. Ask "What else did she say about that?" and the system resolves the reference.
-- **Honest failure behavior** — When evidence is insufficient, the assistant refuses or qualifies rather than hallucinating. This is a product decision, not a bug.
-- **Ship 30 for 30 essays** — Transform grounded insights into ~1,250-word essays following Ship 30 for 30 writing principles: strong hook, clear progression, skimmable formatting, actionable takeaway.
-- **Markdown and HTML/CSS artifacts** — Generate structured written content and visual cards, rendered in a safe in-app Artifact Viewer alongside the chat.
-- **Copy and download** — Export generated artifacts as raw source for use in external tools.
-- **Configurable model providers** — Run locally with Ollama (zero cloud dependencies) or switch to Anthropic Claude for stronger inference. Provider switching requires only an environment variable change.
-
-### Not Included (by design)
-
-- General AI advice outside the transcript corpus
-- Real-time podcast ingestion
-- Multi-tenant enterprise features
-- Autonomous background agents
-- Mobile-native application
+- **Source-grounded Q&A:** Natural-language answers synthesized strictly from retrieved transcript evidence, complete with guest and episode attribution.
+- **Context-aware follow-up:** Multi-turn conversational research with deterministic pronoun and entity resolution (e.g., resolving "Why did she recommend that?" to the guest discussed in the previous turn).
+- **Deterministic refusal:** Mathematical gating that immediately refuses out-of-domain queries ($S < 0.65$) with zero citations, completely avoiding LLM hallucination.
+- **Interactive citation drawer:** Slide-out evidence inspector displaying exact chunk text, guest name, episode title, chunk ID, and cosine similarity score.
+- **Ship 30 for 30 essays:** Transforms grounded research into ~1,250-word structured essays following 7 core Ship 30 principles (hook, clear thesis, 1-3-1 cadence, single-sentence paragraphs, bullet transitions, and actionable takeaways).
+- **Markdown & HTML/CSS artifacts:** Compiles executive summaries, decision matrices, and visual cards rendered alongside the chat.
+- **Artifact workspace:** Live preview, raw source inspection, one-click clipboard copying, and file export (`.md` / `.html`).
+- **Local-first with cloud flexibility:** Runs 100% locally with Ollama (`llama3.1:8b`) with zero cloud dependencies or API keys required, while supporting clean configuration-driven switching to Anthropic Claude.
 
 ---
 
-## Core Product Flow
+## Trust Model & Grounding Gate
+
+The fundamental architecture premise is that **the LLM is an untrusted reasoning engine, never a knowledge store**. The transcript corpus is the sole source of truth.
 
 ```
-Question (natural language)
-    ↓
-Retrieval (pgvector semantic search over transcript chunks)
-    ↓
-Grounding Gate (deterministic evidence evaluation)
-    ↓
-Synthesis (Pi Coding Agent + LLM, constrained to evidence)
-    ↓
-Answer + Source Citations (episode, guest, relevant excerpt)
-    ↓
-Follow-up (session context maintained)
-    ↓
-Artifact Generation (optional: essay, markdown, HTML/CSS)
+Transcript Corpus → pgvector Semantic Search → GroundingGate (Cosine Similarity)
+    ├── Strong (S ≥ 0.78)        ──► Pi Agent Synthesis ──► CitationValidator ──► Grounded Answer + Citations
+    ├── Limited (0.65 ≤ S < 0.78) ──► Pi Agent Synthesis ──► CitationValidator ──► Qualified Answer + Citations
+    ├── Conflicting (S ≥ 0.78)    ──► Pi Agent Synthesis ──► CitationValidator ──► Balanced Multi-Guest Synthesis
+    └── Insufficient (S < 0.65)   ──► Immediate Refusal ──► Zero Citations Returned (LLM Never Called)
 ```
 
-**Trust model:** The transcript corpus is the sole source of truth. The LLM is an untrusted reasoning engine, not a knowledge store. A deterministic grounding gate evaluates evidence *before* the LLM generates a single word — Strong evidence triggers full synthesis, Limited evidence triggers qualified answers, and Insufficient evidence triggers an immediate refusal without calling the model.
+### Evidence Tiers
+
+| Evidence Tier | Similarity Condition ($S$) | System Behavior | Citation Output |
+|:---|:---|:---|:---|
+| **Strong** | Top similarity $S \ge 0.78$ | Full synthesis anchored strictly in transcript excerpts | Full guest & episode citations |
+| **Limited** | $0.65 \le S < 0.78$ | Qualified synthesis explicitly noting partial evidence | Verified matching citations |
+| **Conflicting** | $S \ge 0.78$ across opposing perspectives | Balanced synthesis contrasting both viewpoints | Citations for each perspective |
+| **Insufficient** | $S < 0.65$ or zero matching chunks | Immediate deterministic refusal; LLM is never invoked | Exactly zero citations (no leaks) |
+
+### Non-Negotiable Grounding Invariants
+
+1. **No generic-knowledge fallback:** If Lenny's guests did not discuss a topic, the assistant does not draw upon general LLM pretraining.
+2. **Zero citations on refusal:** When evidence is Insufficient, the system returns a clean refusal message with zero citations in both the API response and the database, preventing low-similarity chunks from masquerading as evidence.
+3. **Automated citation validation:** The `CitationValidator` cross-checks every cited claim against the retrieved transcript chunk IDs and timestamps before returning the final response.
 
 ---
 
 ## Architecture
 
-```mermaid
-graph TD
-    subgraph DockerCompose ["Docker Compose"]
-        FE["Frontend<br/>React 18 + Vite + TypeScript"]
-        BE["FastAPI Backend<br/>Python · Orchestration · API"]
-        PG["PostgreSQL 16 + pgvector<br/>Sessions · Messages · Vectors"]
-        OL["Ollama<br/>Generation + Embedding"]
-    end
-
-    User -->|Port 3000| FE
-    FE -->|REST + SSE| BE
-    BE -->|SQL + Vector Search| PG
-    BE -->|IPC/RPC Bridge| Pi["Pi Coding Agent<br/>Tool-equipped Agent"]
-    Pi -->|generate / stream| OL
-    Pi -->|embed| OL
-    BE -.->|Cloud generation<br/>when configured| Cloud["Anthropic Claude<br/>or OpenAI"]
-```
-
-### Key Architectural Decisions
-
-**Pi Coding Agent** serves as the cognitive core — a tool-equipped agent invoked via an IPC/RPC bridge from the FastAPI backend. Pi executes bounded tools (`transcript_retrieval`, `ship30_writer`, `artifact_compiler`) against validated evidence. It does not have unbounded access to general knowledge.
-
-> **Validation Status:** Pi 0.85.1 running with Ollama (`llama3.1:8b`) and a custom local retrieval tool has been validated at the interactive extension level. The production FastAPI-to-Pi stdio JSON-RPC bridge is an implementation-risk item to be validated as a minimal bridge spike before full agent assembly.
-
-**Provider separation** is strict:
+The system operates across three isolated tiers: the **React 18 SPA**, the **FastAPI Orchestrator**, and the **Pi Coding Agent Runtime**.
 
 ```
-GenerationProvider (routed by LLM_PROVIDER)
-├── OllamaGenerationProvider  (default — local, zero API keys)
-├── AnthropicProvider          (P0 cloud provider)
-└── OpenAIProvider             (P2 — second cloud extension)
-
-EmbeddingProvider (fixed — not affected by LLM_PROVIDER)
-└── OllamaEmbeddingProvider
-    └── nomic-embed-text (768 dimensions)
+Browser (React 18 + Vite)
+    ↓  (HTTP POST / Server-Sent Events)
+FastAPI Backend (:8000)
+    ↓  (Deterministic Query Rewriting + pgvector Search)
+PostgreSQL 16 + pgvector (:5432)
+    ↓  (HNSW Similarity Evaluation)
+GroundingGate (Evidence Check)
+    ↓  (stdio JSON-RPC IPC Bridge)
+Pi Coding Agent Runtime (Node.js daemon · Pi 0.85.1)
+    ↓  (transcript_retrieval Tool + Constrained Prompting)
+Model Inference (Ollama llama3.1:8b or Anthropic Claude 3.5 Sonnet)
+    ↓  (Streamed Text Generation)
+CitationValidator (Provenance & Quote Verification)
+    ↓  (SSE Tokens + Relational DB Commit)
+React UI (Live Stream + Citation Drawer + Artifact Viewer)
 ```
 
-Switching `LLM_PROVIDER` changes only the generation model. Corpus embeddings always use `nomic-embed-text` via Ollama at 768 dimensions. Changing generation providers never invalidates the vector index and never requires re-ingestion. Silent fallbacks between providers are prohibited.
+### The Pi Agent Boundary
+
+FastAPI does not call LLMs directly to generate answers. All synthesis is mediated by the **Pi Coding Agent** (`@earendil-works/pi-coding-agent` v0.85.1).
+
+A persistent Python bridge client (`PiBridgeClient`) spawns and manages a long-lived Node.js daemon (`bridge_daemon.mjs`) communicating over bidirectional stdio JSON-RPC. The Pi agent is equipped with a custom tool extension (`transcript_retrieval`), enforcing bounded tool execution over validated transcript chunks.
+
+### Provider Separation & Strict Decoupling
+
+Generation is strictly decoupled from vector indexing:
+
+- **Generation Provider** (controlled by `LLM_PROVIDER`):
+  - `ollama` *(default)*: Local inference (`llama3.1:8b`), zero cloud credentials required.
+  - `anthropic` *(cloud)*: Anthropic Claude (`claude-3-5-sonnet-20241022`), enabled via `ANTHROPIC_API_KEY`.
+- **Corpus Embedding** *(fixed)*:
+  - Fixed to `nomic-embed-text` (768 dimensions) running via Ollama.
+  - Switching generation providers (e.g. from Ollama to Anthropic) **never** invalidates vector embeddings and **never** requires re-ingesting the corpus.
+- **No silent fallback:** If the configured cloud provider fails (e.g., missing API key, rate limit, or timeout), the system fails loudly with an explicit error. It never silently degrades to a fallback model.
 
 ---
 
-## Grounding & Trust
+## Key Engineering Decisions
 
-The grounding gate enforces four evidence tiers using deterministic cosine similarity thresholds — not an LLM judge:
-
-| Evidence Tier | Condition | System Behavior |
-|---------------|-----------|-----------------|
-| **Strong** | Top similarity ≥ 0.78 | Full synthesis with citations |
-| **Limited** | 0.65 ≤ similarity < 0.78 | Qualified answer noting limited evidence |
-| **Conflicting** | ≥ 0.78 but opposing perspectives across guests | Balanced presentation of both viewpoints |
-| **Insufficient** | < 0.65 or no chunks returned | Deterministic refusal — LLM is never called |
-
-**Source diversity** (number of distinct episodes cited) is a presentation and confidence signal, not a requirement for Strong evidence. A single episode with high-relevance discussion can constitute Strong evidence.
+| Decision | Rationale |
+|:---|:---|
+| **Pi Coding Agent as Runtime** | Provides a bounded, auditable tool-use execution loop with clean process isolation, rather than unstructured prompt-chaining in application code. |
+| **Deterministic Grounding Outside LLM** | Math-based cosine similarity gates evaluation before model invocation. Eliminates hallucinated confidence and guarantees refusal on out-of-domain queries. |
+| **Fixed Embedding Model (`nomic-embed-text`)** | Vector search indexing is decoupled from generation models. Switching from local Ollama to Anthropic Claude incurs zero re-indexing or database downtime. |
+| **Strict Provider Separation (No Silent Fallback)** | Ensures transparent failure over unpredictable degradation. Evaluators know exactly which model served an answer without hidden fallbacks or unexpected cloud bills. |
+| **Single Unified Storage (PostgreSQL 16 + pgvector)** | Co-locates relational session state, message history, generated artifacts, and vector embeddings in one ACID-compliant engine, avoiding dual-database sync drift. |
+| **Bounded Session Context & Query Rewriting** | Resolves conversational references (e.g., "she", "that framework") deterministically using bounded recent history, avoiding token waste and context dilution. |
+| **Sandboxed Artifact Iframe (`sandbox=""`)** | LLM-generated HTML/CSS is treated as untrusted input. Stripped of scripts by Bleach, rendered in an iframe with null origin and strict CSP (`default-src 'none'; style-src 'unsafe-inline'`). |
+| **Transcript Evidence as Untrusted Data** | Retrieved text is injected inside bounded `<evidence>` XML tags rather than raw system instructions, mitigating prompt injection risks from podcast content. |
 
 ---
 
-## Data Source
+## Product Experience
 
-**Transcript corpus:** [ChatPRD/lennys-podcast-transcripts](https://github.com/ChatPRD/lennys-podcast-transcripts)
+The user workflow transitions smoothly from natural-language inquiry to structured deliverable:
 
-The corpus contains ~250–300 episodes of Lenny's Podcast transcripts in Markdown format with YAML frontmatter (guest name, episode title, topics). The repository is publicly available and maintained separately. This project does not claim ownership of the transcript content.
+1. **Inquire:** Enter a product or growth question in the conversational workspace.
+2. **Retrieve & Gate:** The backend searches pgvector chunks, calculates cosine similarity, and assigns an evidence tier (`Strong`, `Limited`, `Conflicting`, or `Insufficient`).
+3. **Stream & Synthesize:** For grounded tiers, Pi streams tokens in real time via Server-Sent Events (SSE). Out-of-domain queries refuse immediately.
+4. **Inspect Evidence:** Click any citation badge to slide out the evidence drawer, revealing guest details, episode titles, chunk IDs, similarity scores, and verbatim quotes.
+5. **Follow-Up:** Continue the conversation naturally. The deterministic query rewriter resolves pronouns and expands context across turns.
+6. **Compile Deliverables:** Trigger artifact generation to transform grounded findings into a Ship 30 for 30 essay, Markdown brief, or visual HTML card.
+7. **Inspect & Export:** Toggle between rendered **Preview** and raw **Source** views, copy to clipboard, or download files directly.
+
+---
+
+## Artifacts & Security Sandbox
+
+The application supports three structured artifact formats compiled from grounded research:
+
+| Artifact Type | Format | Target Length / Structure | Use Case |
+|:---|:---|:---|:---|
+| **Ship 30 for 30 Essay** | Markdown | ~1,250 words · 7 core principles | Thought-leadership essays, strategy playbooks, newsletters |
+| **Markdown Summary** | Markdown | Scannable sections · Bullet matrices | Executive briefings, decision memos, team handoffs |
+| **HTML/CSS Card** | HTML5 + CSS | Self-contained responsive component | Visual scorecards, framework widgets, presentation embeds |
+
+### Artifact Viewer Capabilities
+
+- **Preview Tab:** Formatted Markdown presentation or sandboxed HTML rendering.
+- **Source Tab:** Clean, syntax-highlighted raw source code.
+- **Copy:** One-click copy of raw source to clipboard with toast confirmation.
+- **Download:** Direct browser download as `.md` or `.html`.
+
+### Security Sandbox Model
+
+Generated HTML is treated as potentially adversarial code:
+
+- **Pre-render sanitization:** Python `bleach` strips dangerous tags (`<script>`, `<object>`, `<iframe>`, `<form>`) and inline event handlers (`onclick`, `onerror`, `onload`).
+- **Strict iframe sandboxing:** Rendered in an `<iframe>` with `sandbox=""` (no `allow-scripts`, no `allow-same-origin`, no `allow-forms`, no `allow-popups`).
+- **Opaque null origin:** The iframe cannot access parent application cookies, local storage, or DOM.
+- **Injected Content Security Policy:** Enforces `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">`.
+
+---
+
+## Data Pipeline & Retrieval Engineering
+
+The ingestion pipeline transforms raw episode transcripts into a searchable semantic knowledge graph:
+
+```
+Markdown Transcripts + YAML Frontmatter (ChatPRD Corpus)
+    ↓
+Metadata Extraction (Guest, Episode Title, Publication Date, Topics)
+    ↓
+Speaker-Aware Semantic Chunking (~600 tokens, 100-token overlap, speaker preambles)
+    ↓
+Batch Embeddings (nomic-embed-text via Ollama /api/embed, 32 chunks/batch)
+    ↓
+PostgreSQL 16 + pgvector Storage (12,014 Chunks · 768 Dimensions)
+    ↓
+HNSW Vector Index (m=16, ef_construction=64, vector_cosine_ops)
+```
+
+### Verified Corpus Metrics
+
+- **Total Episodes:** 303 episodes
+- **Total Chunks:** 12,014 transcript chunks
+- **Total Embeddings:** 12,014 vectors (zero NULL embeddings)
+- **Vector Dimensionality:** 768 dimensions (`nomic-embed-text`)
+- **Index Type:** HNSW (`idx_chunks_embedding_hnsw`) with cosine distance
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Vite, TailwindCSS |
-| Backend | Python, FastAPI |
-| Agent | Pi Coding Agent (`@earendil-works/pi-coding-agent`) |
-| Database | PostgreSQL 16 with pgvector extension |
-| Embedding | Ollama + `nomic-embed-text` (768-dim) |
-| Local generation | Ollama (`llama3.1:8b` default) |
-| Cloud generation | Anthropic Claude 3.5 Sonnet (P0), OpenAI GPT-4o (P2) |
-| Deployment | Docker Compose |
-
----
-
-## Prerequisites
-
-- **Git**
-- **Docker Desktop** (macOS/Windows) or **Docker Engine + Compose** (Linux)
-  - Docker Compose V2 (`docker compose` subcommand)
-- **Disk space:** ~8 GB for Docker images and model weights
-- **RAM:** ≥ 16 GB recommended for local Ollama inference with an 8B model
-- **Network:** Initial setup downloads Docker images and the Ollama model
-
-The canonical local path uses Docker Compose exclusively. No cloud API key is required for the default demo.
+| Layer | Component | Version / Specification | Role |
+|:---|:---|:---|:---|
+| **Frontend** | React | 18.2 | Component-driven conversational UI |
+| | TypeScript | 5.2 | Type safety and schema synchronization |
+| | Vite | 5.2 | High-performance bundling and HMR |
+| | TailwindCSS | 3.4 | Consistent typography and utility styling |
+| | Lucide React | 0.344 | Interface iconography |
+| **Backend** | Python | 3.11 | Application runtime |
+| | FastAPI | 0.110 | Asynchronous REST and SSE routing |
+| | SQLAlchemy | 2.0 (asyncpg) | Asynchronous ORM and relational persistence |
+| | Pydantic | 2.6 | Request/response data validation and settings |
+| | Bleach | 6.1 | Defense-in-depth HTML sanitization |
+| **Agent Runtime** | Pi Coding Agent | 0.85.1 | Tool-equipped agent core (`@earendil-works/pi-coding-agent`) |
+| | Node.js Daemon | stdio JSON-RPC | Persistent bridge process (`bridge_daemon.mjs`) |
+| **Database** | PostgreSQL | 16 | Relational session, message, and artifact storage |
+| | pgvector | 0.7.0 | Dense vector similarity search with HNSW indexing |
+| **Models** | Ollama | Latest | Containerized local model runtime |
+| | Llama 3.1 | 8b | Default local generation model |
+| | Nomic Embed Text | 768-dim | Fixed corpus embedding model |
+| | Anthropic Claude | Claude 3.5 Sonnet | Optional cloud generation provider |
+| **Deployment** | Docker Compose | V2 | Multi-container orchestration |
 
 ---
 
 ## Quick Start
 
-> **Implementation status:** Full multi-container system is implemented and verified. All services (`postgres`, `ollama`, `backend`, `frontend`) run via Docker Compose with zero cloud API keys required.
-> - **Web Workspace:** `http://localhost:3000`
-> - **FastAPI API & OpenAPI Docs:** `http://localhost:8000/docs`
-> - **Health & Status:** `http://localhost:8000/api/v1/health`
+### Prerequisites
+
+- **Git**
+- **Docker Desktop** (macOS/Windows) or **Docker Engine + Compose V2** (Linux)
+- **Disk Space:** ~8 GB for Docker container images and local model weights
+- **RAM:** $\ge 16\text{ GB}$ recommended for local Ollama inference
+
+The canonical workflow runs entirely inside Docker Compose with zero cloud API keys required.
+
+### Step 1: Clone and Configure
 
 ```bash
-# 1. Clone repository
+# Clone the repository
 git clone https://github.com/nishantkr0904/The_Lenny_Growth_Assistant.git
 cd The_Lenny_Growth_Assistant
 
-# 2. Copy default environment (pre-configured for local Ollama — no cloud keys needed)
+# Copy the canonical environment template
 cp .env.example .env
-
-# 3. Start all services
-docker compose up -d
-
-# 4. Run one-time transcript ingestion (pre-seeded with representative episodes)
-docker compose exec backend python -m scripts.ingest --limit 5
-
-# 5. Open the web research application
-open http://localhost:3000
-
-# 6. Run automated test suites
-docker compose exec backend pytest -v        # 80 backend & security tests
-cd frontend && npm test                     # 8 frontend Vitest component tests
 ```
 
-Setup targets under 10 minutes under documented prerequisites. Actual time varies with image and model download speeds.
+### Step 2: Start All Services
+
+```bash
+docker compose up -d
+```
+
+### Step 3: Pull Local Ollama Models (First Run Only)
+
+```bash
+docker compose exec ollama ollama pull llama3.1:8b
+docker compose exec ollama ollama pull nomic-embed-text
+```
+
+### Step 4: Ingest Transcript Corpus
+
+The repository includes the full 303-episode transcript corpus in `data/transcripts/`. Run the ingestion pipeline to populate PostgreSQL and pgvector:
+
+```bash
+# Ingest full corpus (303 episodes, 12,014 chunks with 768-dim embeddings)
+docker compose exec backend python -m scripts.ingest
+
+# Optional: Run a quick 5-episode smoke test instead of the full corpus
+docker compose exec backend python -m scripts.ingest --limit 5
+```
+
+### Step 5: Access the Application
+
+Once running, access the local services:
+
+- **Web Workspace:** [http://localhost:3000](http://localhost:3000)
+- **FastAPI Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Backend Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
 
 ---
 
 ## Environment Configuration
 
-The `.env.example` file will contain all configurable variables with safe defaults and no secrets.
+All application configuration is managed via `.env` (derived from `.env.example`). No secrets are committed to the repository.
 
-### Generation Provider
+### Default Local Configuration (Ollama)
 
 ```env
-# Local demo (default — zero cloud credentials required)
+# Runtime
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+CORS_ORIGINS=["http://localhost:3000"]
+
+# Database (Internal Docker network URL)
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/lenny_growth
+
+# Generation Provider (Local Ollama default)
 LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=llama3.1:8b
-```
+OLLAMA_TIMEOUT_SECONDS=180.0
 
-### Corpus Embedding (fixed)
-
-```env
-# Always uses Ollama nomic-embed-text regardless of LLM_PROVIDER
+# Fixed Corpus Embedding Configuration
 EMBED_MODEL=nomic-embed-text
 EMBED_DIMENSIONS=768
+
+# Grounding & Retrieval Thresholds
+RETRIEVAL_TOP_K=15
+GROUNDING_STRONG_THRESHOLD=0.78
+GROUNDING_LIMITED_THRESHOLD=0.65
 ```
 
-### Cloud Provider (optional)
+### Optional Cloud Configuration (Anthropic)
+
+To switch generation to Anthropic Claude 3.5 Sonnet, update `.env`:
 
 ```env
-# Anthropic Claude (generation only)
-# LLM_PROVIDER=anthropic
-# ANTHROPIC_API_KEY=<your-anthropic-api-key>
-# ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-
-# OpenAI (generation only — P2)
-# LLM_PROVIDER=openai
-# OPENAI_API_KEY=<your-openai-api-key>
-# OPENAI_MODEL=gpt-4o
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 ```
 
-The default local path does not require any cloud API key.
+> **Note on Provider Switching:**
+> - Switching `LLM_PROVIDER` affects generation only.
+> - Corpus embeddings remain fixed to `nomic-embed-text` via Ollama at 768 dimensions.
+> - If `LLM_PROVIDER=anthropic` is set but `ANTHROPIC_API_KEY` is missing or invalid, the backend returns an explicit error. There is no silent fallback to Ollama.
 
 ---
 
-## Provider Configuration
+## Testing & Verification
 
-| Provider | `LLM_PROVIDER` value | API Key Required | Status |
-|----------|---------------------|------------------|--------|
-| Ollama (local) | `ollama` | No | Default — mandatory for submitted demo |
-| Anthropic Claude | `anthropic` | Yes (`ANTHROPIC_API_KEY`) | P0 cloud provider |
-| OpenAI | `openai` | Yes (`OPENAI_API_KEY`) | P2 — second cloud extension |
+The codebase maintains full automated and manual test coverage across every architectural boundary.
 
-**No silent fallback.** If a selected cloud provider is unavailable or missing an API key, the system returns an explicit error message. It never silently degrades to a different provider.
+### 1. Automated Backend Test Suite (pytest)
 
-### Host-Native Ollama (Optional Escape Hatch)
-
-On Apple Silicon Macs, containerized Ollama cannot access Metal GPU acceleration and falls back to CPU inference (3–5x slower). If you have Ollama installed natively with models pre-cached:
-
-```env
-# 1. Comment out the 'ollama' service in docker-compose.yml
-# 2. Point to host Ollama:
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-```
-
-This is an optional developer/performance optimization, not the canonical evaluator path.
-
----
-
-## Transcript Ingestion
-
-The ingestion pipeline transforms raw podcast transcripts into searchable knowledge:
-
-```
-Transcript Markdown files (with YAML frontmatter)
-    ↓
-Metadata extraction (guest, episode title, topics, publication date)
-    ↓
-Speaker-aware semantic chunking (~600 tokens, 100-token overlap)
-    ↓
-Embedding generation (nomic-embed-text via Ollama, 768 dimensions)
-    ↓
-Storage in PostgreSQL + pgvector (HNSW index, cosine distance)
-```
-
-The corpus yields approximately 12,000–18,000 chunks. An HNSW index ensures vector search executes in < 25ms. Every chunk retains its source episode, guest, speaker label, and position for full provenance traceability.
-
-Corpus refresh is a documented manual re-ingestion process. Automated refresh is a future capability.
-
----
-
-## Artifacts
-
-The assistant generates three artifact types from grounded research:
-
-| Type | Format | Use Case |
-|------|--------|----------|
-| **Ship 30 for 30 Essay** | Markdown (~1,250 words) | Structured thought-leadership content |
-| **Markdown Summary** | Markdown | Bullet points, frameworks, matrices |
-| **HTML/CSS Card** | HTML + inline CSS | Visually rich, responsive content cards |
-
-### Artifact Viewer
-
-Generated artifacts render in an in-app viewer alongside the chat:
-
-- **Preview** — Rendered output (Markdown or HTML)
-- **Source** — Raw source code
-- **Copy** — Copy source to clipboard
-- **Download/Export** — Save as file
-
-**Security:** Generated HTML is treated as untrusted output. It renders inside a sandboxed `<iframe>` with:
-- Bare `sandbox` attribute (no permissions granted)
-- No `allow-scripts` — JavaScript execution is completely blocked
-- No `allow-same-origin` — opaque `null` origin prevents access to parent application
-- CSP: `default-src 'none'; style-src 'unsafe-inline'`
-- Pre-render HTML sanitization to strip `<script>`, `onclick`, `onerror`, `javascript:` URIs
-
-Artifact editing and version history are planned as P2 capabilities.
-
----
-
-## Development
-
-The application is fully implemented, containerized, and production-hardened.
-
-### Repository Structure
-
-```
-├── frontend/               # React 18 + Vite + TypeScript SPA
-│   ├── src/components/     # Chat, CitationDrawer, ArtifactViewer, SessionList
-│   ├── src/tests/          # Vitest component unit tests
-│   └── nginx.conf          # Nginx reverse proxy with unbuffered SSE streaming
-├── backend/                # Python FastAPI application
-│   ├── app/agent/          # Pi Coding Agent bridge client & daemon
-│   ├── app/api/            # FastAPI route handlers (Health, QnA, Artifacts, Retrieval)
-│   ├── app/artifacts/      # Ship 30 for 30, Markdown brief, and sanitized HTML compilers
-│   ├── app/core/           # Config, database engine, GroundingGate, provider factory
-│   ├── app/ingestion/      # Chunker, frontmatter parser, batch embeddings, pipeline
-│   ├── app/retrieval/      # pgvector HNSW vector search engine & query rewriter
-│   ├── app/security/       # Bleach HTML sanitizer and strict CSP enforcement
-│   └── tests/              # 80 comprehensive pytest automated tests
-├── .pi/                    # Pi Coding Agent extensions (transcript_retrieval.ts)
-├── agent_transcripts/      # AI coding agent trajectory logs and failed attempt resolutions
-├── docs/                   # Documentation & manual UI test plan (11 user journeys)
-├── docker-compose.yml      # Multi-container orchestration (postgres, ollama, backend, frontend)
-├── .env.example            # Canonical environment variable template (zero secrets)
-├── PRD.md                  # Authoritative Product Requirements Document
-├── architecture.md         # System Architecture & Technical Specifications
-└── design.md               # UI/UX & Interaction Design Specifications
-```
-
----
-
-## Testing
-
-The project maintains comprehensive test coverage across both automated test suites and structured manual UI verification.
-
-### Automated Test Suites
+The backend suite covers API routing, GroundingGate evaluation, Pi RPC bridge communication, batch embeddings, chunking, rewriter logic, HTML sanitization, and session isolation.
 
 ```bash
-# 1. Run all 80 backend unit, integration, and security tests
 docker compose exec backend pytest -v
+```
 
-# 2. Run all 8 frontend component unit tests
+**Result: 111 passed in 6.5s**
+
+| Test Module | Tests | Scope Covered | Status |
+|:---|:---|:---|:---|
+| `test_agent_tool.py` | 5 | Pi tool extension, retrieval schema, parameter handling | **PASS** |
+| `test_artifacts.py` | 5 | Ship 30 essay, Markdown summary, and HTML card compilation | **PASS** |
+| `test_audit_matrix.py` | 8 | Grounding taxonomy, artifact compilation integrity, lexical bounds | **PASS** |
+| `test_chunker.py` | 4 | Speaker turn segmentation, 600-token boundaries, overlap | **PASS** |
+| `test_citation.py` | 6 | Provenance verification, zero citations on refusal | **PASS** |
+| `test_config.py` | 3 | Pydantic settings validation, port mappings | **PASS** |
+| `test_conversational_intent.py` | 5 | Casual greetings routing, knowledge query dispatch, artifact safety | **PASS** |
+| `test_embeddings.py` | 5 | Batch `/api/embed` processing, dimensionality enforcement | **PASS** |
+| `test_health.py` | 4 | Readiness probes, database and provider connectivity | **PASS** |
+| `test_ingestion.py` | 4 | Pipeline execution, idempotency, deduplication | **PASS** |
+| `test_parser.py` | 4 | Frontmatter extraction, metadata normalization | **PASS** |
+| `test_pi_bridge.py` | 10 | Stdio JSON-RPC lifecycle, tool query preservation, compound routing | **PASS** |
+| `test_providers.py` | 6 | Ollama adapter, Anthropic provider, missing-key failure | **PASS** |
+| `test_qna_api.py` | 5 | Q&A endpoints, empty query rejection, SSE headers | **PASS** |
+| `test_retrieval.py` | 23 | HNSW cosine search, GroundingGate tiers, uppercase acronym boost | **PASS** |
+| `test_rewriter.py` | 5 | Conversational pronoun resolution, multi-turn state | **PASS** |
+| `test_security_sanitization.py` | 6 | Bleach script stripping, event handler removal, CSP injection | **PASS** |
+| `test_sessions.py` | 3 | Session CRUD, multi-session isolation | **PASS** |
+| **Total Backend** | **111** | **Complete backend coverage** | **PASS** |
+
+### 2. Automated Frontend Test Suite (Vitest)
+
+```bash
 cd frontend && npm test
 ```
 
-| Suite | Tests | Scope | Status |
-|-------|-------|-------|--------|
-| **Backend API & Routing** | 12 | Health, session persistence, SSE streaming, retrieval endpoints | **PASS** |
-| **Retrieval & GroundingGate** | 16 | Cosine thresholds (Strong, Limited, Insufficient), HNSW vector queries | **PASS** |
-| **Pi Bridge & Agent RPC** | 4 | Pi 0.85.1 stdio RPC, tool extensions, failure handling, streaming | **PASS** |
-| **Ingestion & Embeddings** | 14 | Parser, speaker turn chunking, idempotency, batch embeddings | **PASS** |
-| **Artifacts & Security** | 11 | Ship 30 for 30 essay, Bleach HTML sanitization, CSP injection | **PASS** |
-| **Provider Adapters** | 7 | Ollama local inference, Anthropic cloud provider, key validation | **PASS** |
-| **Frontend Components** | 8 | Chat interface, citation drawer, artifact viewer tabs, session list | **PASS** |
-| **Total Automated** | **88** | Complete backend and frontend test coverage | **PASS** |
+**Result: 11 passed (11 tests in `components.test.tsx`)**
+- Chat interface rendering and input submission
+- Live token streaming state transitions
+- Citation badge rendering and click interactions
+- Citation drawer expansion and quote inspection
+- Artifact Viewer tab toggling (Preview vs. Source)
+- Copy-to-clipboard action with visual toast
+- Session list navigation and new session creation
+- Grounding status badge display (`Strong`, `Limited`, `Contrasting`, `Insufficient`)
+- Conversational greeting display without refusal card or citation badges
+- Refusal card display on out-of-domain queries
+- Create Artifact action gating on valid grounded evidence
 
-### Manual UI Test Plan
+### 3. Manual UI Verification Matrix
 
-The complete 11-journey evaluator test plan is documented in [`docs/manual_ui_test_plan.md`](docs/manual_ui_test_plan.md):
-- Journey 1: Clean Startup & Empty State
-- Journey 2: Out-of-Domain Refusal Flow ($S < 0.65$, zero citations)
-- Journey 3: Real Grounded Q&A Flow with Live SSE Streaming
-- Journey 4: Citation Drawer & Evidence Inspection
-- Journey 5: Context-Aware Follow-Up with Query Rewriting
-- Journey 6: Ship 30 for 30 Essay Generation (~1,250 words, 7 principles)
-- Journey 7: Markdown Summary Generation
-- Journey 8: HTML/CSS Card Sandbox Isolation & CSP Verification
-- Journey 9: Artifact Viewer Actions (Preview / Source / Copy / Download)
-- Journey 10: Multi-Session Isolation & Persistence
-- Journey 11: Error Handling & Network Resilience
+The application has been verified end-to-end across the 11 user journeys documented in [`docs/manual_ui_test_plan.md`](docs/manual_ui_test_plan.md):
+
+| # | User Journey | Target Behavior | Result |
+|:---|:---|:---|:---|
+| **1** | **Clean Startup & Empty State** | Welcome state, prompt chips, grounding disclaimer | **PASS** |
+| **2** | **Out-of-Domain Refusal Flow** | Insufficient evidence ($S < 0.65$), refusal text, zero citations | **PASS** |
+| **3** | **Real Grounded Q&A Flow** | Real-time SSE streaming, grounding pill, verified citations | **PASS** |
+| **4** | **Citation Drawer & Evidence Inspector** | Drawer slide-out, chunk ID, verbatim excerpt, similarity score | **PASS** |
+| **5** | **Context-Aware Follow-Up Flow** | Pronoun rewriting ("she" $\to$ prior guest), grounded follow-up | **PASS** |
+| **6** | **Ship 30 for 30 Artifact Creation** | 250–300 word atomic essay, headline, hook, takeaway | **PASS** |
+| **7** | **Artifact Viewer & Tab Switching** | Live preview / raw source tabs, copy to clipboard, download | **PASS** |
+| **8** | **Session History & Switching** | Session list sidebar, active session switching, state persistence | **PASS** |
+| **9** | **Error State & Recovery** | Malformed inputs, empty submissions, graceful notifications | **PASS** |
+| **10** | **Provider Indicator & Toggle** | Active provider pill (`Ollama` vs `Anthropic`), status | **PASS** |
+| **11** | **End-to-End Responsive Layout** | Clean rendering, responsive breakpoints, drawer overlays | **PASS** |
 
 ---
 
-## Project Documentation
+## Repository Structure
+
+```text
+the-lenny-growth-assistant/
+├── backend/
+│   ├── app/
+│   │   ├── agent/            # Pi Coding Agent bridge daemon & Q&A orchestrator
+│   │   ├── api/v1/           # Health, Ingest, Retrieval, Sessions, Artifacts endpoints
+│   │   ├── artifacts/        # Ship 30 compiler, HTML sanitizer, CSP enforcer
+│   │   ├── core/             # Configuration & logging infrastructure
+│   │   ├── db/               # PostgreSQL / pgvector connection & initialization
+│   │   ├── ingestion/        # Markdown parser, recursive chunker, nomic embeddings
+│   │   ├── models/           # Pydantic schemas and database models
+│   │   ├── providers/        # Generation providers (Ollama, Anthropic)
+│   │   ├── retrieval/        # pgvector HNSW search engine, rewriter, CitationValidator
+│   │   └── security/         # Bleach HTML sanitizer and strict CSP enforcement
+│   ├── data/transcripts/     # Curated Markdown transcripts (303 episodes)
+│   ├── scripts/
+│   │   └── ingest.py         # CLI entrypoint for transcript ingestion and re-indexing
+│   ├── tests/                # 111 automated pytest unit, integration, and security tests
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # Chat, CitationDrawer, ArtifactViewer, SessionList
+│   │   ├── services/         # SSE streaming client and REST API service
+│   │   └── tests/            # 11 Vitest component unit tests
+│   ├── nginx.conf            # Reverse proxy configuration with unbuffered SSE streaming
+│   └── Dockerfile
+├── .pi/                      # Pi Coding Agent extensions (transcript_retrieval.ts)
+├── agent_transcripts/        # AI coding agent trajectory logs and failed attempt resolutions
+├── docs/                     # Documentation & manual UI test plan (11 user journeys)
+├── docker-compose.yml        # Multi-container orchestration (postgres, ollama, backend, frontend)
+├── .env.example              # Canonical environment configuration template (zero secrets)
+├── PRD.md                    # Authoritative Product Requirements Document
+├── architecture.md           # System Architecture & Technical Specifications
+└── design.md                 # UI/UX & Interaction Design Specifications
+```
+
+---
+
+## Documentation Index
 
 | Document | Purpose |
-|----------|---------|
-| [PRD.md](PRD.md) | Authoritative product contract — user, problem, requirements, acceptance criteria |
-| [architecture.md](architecture.md) | System architecture — schema, APIs, Pi agent routing, security, deployment |
-| [design.md](design.md) | UX and interaction design — IA, user flows, component taxonomy, trust patterns |
-| [docs/manual_ui_test_plan.md](docs/manual_ui_test_plan.md) | 11-journey manual UI verification plan and step-by-step procedures |
-| [agent_transcripts/README.md](agent_transcripts/README.md) | Coding agent trajectory logs, failed attempts, and technical corrections |
+|:---|:---|
+| [`PRD.md`](PRD.md) | Authoritative product requirements, user personas, functional specifications, and acceptance criteria. |
+| [`architecture.md`](architecture.md) | Technical architecture specification, data models, IPC bridge mechanics, security boundaries, and runtime topology. |
+| [`design.md`](design.md) | UI/UX design specifications, component taxonomy, interaction flows, accessibility standards, and trust badges. |
+| [`docs/manual_ui_test_plan.md`](docs/manual_ui_test_plan.md) | Step-by-step 11-journey evaluator test plan with reproduction procedures and expected behaviors. |
+| [`agent_transcripts/README.md`](agent_transcripts/README.md) | Trajectory logs, technical blockers encountered during construction, and engineering resolutions. |
 
 ---
 
-## Implementation Priorities
+## Security Architecture
 
-| Priority | Scope | Key Deliverables | Status |
-|----------|-------|-----------------|--------|
-| **P0** | Core research loop | Transcript ingestion (303 episodes), retrieval, grounding gate, Pi agent integration, grounded Q&A, session persistence, Ollama & Anthropic providers | **COMPLETE** |
-| **P1** | Artifacts and product completeness | Ship 30 for 30 skill, artifact generation, Artifact Viewer (Preview/Source/Copy/Download), streaming UI, error states, session management | **COMPLETE** |
-| **P2** | Advanced / later | Artifact editing, version history, OpenAI provider, automated corpus refresh, mobile optimization | Future |
-
----
-
-## Security
-
-- **Generated HTML is untrusted.** All LLM output is treated as potentially adversarial. HTML artifacts render in a strict sandbox with no script execution (`sandbox=""`).
-- **Transcripts are untrusted input.** Injected as data inside `<evidence>` XML tags, never as system instructions.
-- **Secrets are never committed.** API keys load from environment variables. `.env.example` contains safe defaults only.
-- **Provider errors are explicit.** Missing API keys, unavailable services, and model timeouts produce specific, actionable error messages. The system never silently switches providers.
-- **Sessions are isolated.** All database queries enforce `WHERE session_id = :id`. Messages from one session cannot leak into another.
+- **Untrusted HTML isolation:** All LLM-generated HTML/CSS is sanitized via Python `bleach` and rendered inside an isolated `<iframe>` with `sandbox=""` and a strict Content Security Policy (`default-src 'none'; style-src 'unsafe-inline'`). JavaScript execution and same-origin DOM access are completely prevented.
+- **Transcripts as data, not instructions:** Retrieved transcript text is injected into model prompts inside delimited `<evidence>` XML blocks, mitigating indirect prompt injection attacks from transcript content.
+- **Zero secrets in source:** No API keys or credentials are baked into images or repository files. All configuration loads from environment variables, with `.env.example` containing safe local defaults.
+- **Strict provider error handling:** Missing credentials or connection dropouts produce immediate, explicit error messages. The system never silently fails over to unintended cloud services.
+- **Multi-session isolation:** All database operations enforce strict session scoping (`WHERE session_id = :id`), preventing conversational state leakage across sessions.
 
 ---
 
-## Known Validation Items
+## Deferred Scope & Future Enhancements
 
-| Item | Validation Status | Result |
-|------|-------------------|--------|
-| **Pi Coding Agent RPC integration** | **Validated** | Built long-lived stdio RPC bridge daemon (`bridge_daemon.mjs`) communicating with Pi 0.85.1. |
-| **Grounding gate threshold calibration** | **Validated** | Cosine similarity thresholds verified: Strong ($S \ge 0.78$), Limited ($0.65 \le S < 0.78$), Insufficient ($S < 0.65$). |
-| **Embedding quality validation** | **Validated** | `nomic-embed-text` (768 dimensions) retrieves exact quotes and episodes across 303 episodes. |
-| **Chunk size validation** | **Validated** | ~600 tokens with 100-token overlap and context preambles yields high specificity without loss of context. |
-| **Containerized Ollama on Apple Silicon** | **Validated** | Containerized CPU inference operates reliably; host-native escape hatch documented for high-throughput dev. |
+The current implementation satisfies all core research and artifact generation requirements. The following items represent deferred P2 capabilities:
 
----
-
-## Source Attribution
-
-The transcript corpus is sourced from the [ChatPRD/lennys-podcast-transcripts](https://github.com/ChatPRD/lennys-podcast-transcripts) repository. This project does not claim ownership of the podcast content. All generated answers include explicit attribution to the original episode and guest.
+- **Artifact version history & in-app editing:** The current implementation compiles immutable artifacts with raw source view, clipboard copying, and file download. Direct in-browser rich text editing is deferred.
+- **Automated corpus refresh:** Transcripts are ingested via the idempotent CLI pipeline (`python -m scripts.ingest`). Automated scraping of newly released episodes via RSS is deferred.
+- **Additional cloud providers:** Anthropic Claude 3.5 Sonnet is implemented and configuration-driven. OpenAI GPT-4o and Google Gemini adapters are deferred.
+- **Mobile-native UI layout:** The web application is optimized for desktop product and growth research workflows.
 
 ---
 
-*The Lenny Growth Assistant is fully implemented, production-hardened, and verified across all functional, architectural, and security criteria.*
+## Source Attribution & Disclaimer
+
+- The podcast transcript corpus is sourced from [ChatPRD/lennys-podcast-transcripts](https://github.com/ChatPRD/lennys-podcast-transcripts).
+- Podcast audio and transcript content belong to [Lenny Rachitsky](https://www.lennyspodcast.com/) and the respective podcast guests.
+- The Lenny Growth Assistant is an independent research project providing a search, synthesis, and artifact generation interface over publicly available transcript archives.
+
+---
+
+*The Lenny Growth Assistant is fully implemented, containerized, and verified across all functional, architectural, and security requirements.*

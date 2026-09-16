@@ -10,7 +10,9 @@ from app.artifacts.compiler import ArtifactCompiler
 from app.artifacts.models import ArtifactCreateRequest, ArtifactListItem, ArtifactResponse, SourceReferenceItem
 from app.artifacts.store import ArtifactStore
 from app.db.session import get_db
+from app.retrieval.models import GroundingTier
 from app.sessions.store import SessionStore
+
 
 logger = logging.getLogger("lenny_assistant.api.artifacts")
 
@@ -61,12 +63,18 @@ async def create_artifact(
             detail="No assistant message found to derive artifact from.",
         )
 
-    # Check grounding: refusal or insufficient evidence cannot be transformed into factual artifacts
-    if target_msg.evidence_tier == "insufficient":
+    # Check grounding: refusal, conversational turns, or messages without sources cannot be transformed into factual artifacts
+    tier_str = str(target_msg.evidence_tier or "").strip().lower()
+    if (
+        not target_msg.sources
+        or tier_str in ("insufficient", "conversational", "none", "")
+        or GroundingTier.from_str(target_msg.evidence_tier) == GroundingTier.INSUFFICIENT
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot compile artifact from ungrounded refusal. The topic must have grounded evidence from Lenny's Podcast.",
+            detail="Cannot compile artifact from ungrounded refusal or conversational turns. The topic must have grounded evidence from Lenny's Podcast.",
         )
+
 
     # Extract sources dictionary from target message
     sources_data = [

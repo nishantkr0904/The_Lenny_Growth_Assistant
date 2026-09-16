@@ -384,3 +384,165 @@ async def test_live_retrieval_insufficient_query():
     assert decision.tier == GroundingTier.INSUFFICIENT
     assert decision.can_synthesize is False
     assert decision.selected_evidence == []
+
+
+# ============================================================================
+# 6. Targeted Regression Tests for Phonetic Normalization & Domain Term Retrieval
+# ============================================================================
+
+def test_query_normalization_artifact_meta_patterns():
+    """Verify artifact generation prompt prefixes are stripped to avoid vector dilution."""
+    assert normalize_query("Write a Ship 30 for 30 essay about Shreyash Doshi's LNO framework.") == "Shreyas Doshi's LNO framework."
+    assert normalize_query("Draft an executive summary on product led growth") == "product led growth"
+    assert normalize_query("Create an interactive HTML card covering churn metrics") == "churn metrics"
+
+
+def test_query_normalization_guest_phonetics():
+    """Verify guest name phonetic spelling variations are normalized across corpus."""
+    assert normalize_query("What does Shreyash Doshi say about task triage?") == "What does Shreyas Doshi say about task triage?"
+    assert normalize_query("How did Brian Cheskey build culture?") == "How did Brian Chesky build culture?"
+    assert normalize_query("Stewart Butterfield advice") == "Stewart Butterfield advice"
+
+
+def test_distinctive_term_extraction():
+    """Verify generic acronym and framework extractor identifies key terms without stopwords."""
+    from app.retrieval.engine import extract_distinctive_terms, extract_potential_guest_mentions
+
+    terms_lno = extract_distinctive_terms("What is Shreyash Doshi's LNO framework?")
+    assert "LNO" in terms_lno
+
+    terms_essay = extract_distinctive_terms("Write a Ship 30 for 30 essay about Shreyash Doshi's LNO framework.")
+    assert "LNO" in terms_essay
+
+    terms_b2b = extract_distinctive_terms("What does Elena Verna say about B2B product-led growth?")
+    assert "B2B" in terms_b2b
+
+    terms_quantum = extract_distinctive_terms("What does Lenny's Podcast say about quantum chromodynamics?")
+    assert terms_quantum == []
+
+    guests_lno = extract_potential_guest_mentions("What is Shreyas Doshi's LNO framework?")
+    assert "Shreyas Doshi" in guests_lno
+
+
+@pytest.mark.asyncio
+async def test_live_retrieval_lno_framework_queries():
+    """
+    Live query verification for Shreyash Doshi LNO framework questions.
+    Guarantees both direct and artifact-generation prompts meet the synthesis threshold.
+    """
+    from app.db.session import engine as db_engine
+
+    retrieval_engine = VectorRetrievalEngine()
+    gate = GroundingGate()
+
+    queries = [
+        "What is Shreyash Doshi's LNO framework?",
+        "Write a Ship 30 for 30 essay about Shreyash Doshi's LNO framework.",
+    ]
+
+    async with db_engine.connect() as conn:
+        for q in queries:
+            evidence = await retrieval_engine.search(query=q, top_k=5, db=conn)
+            assert len(evidence) > 0
+
+            top = evidence[0]
+            assert "Shreyas Doshi" in top.guest
+            assert "LNO" in top.content
+            assert top.similarity_score >= 0.65
+
+            decision = gate.triage(evidence)
+            assert decision.can_synthesize is True
+            assert decision.tier in (GroundingTier.LIMITED, GroundingTier.STRONG)
+            assert len(decision.selected_evidence) >= 1
+            assert decision.selected_evidence[0].guest == "Shreyas Doshi"
+
+
+@pytest.mark.asyncio
+async def test_live_retrieval_quantum_refusal_zero_citations():
+    """
+    Live query verification that out-of-domain quantum query produces Insufficient tier
+    with exactly zero selected citations.
+    """
+    from app.db.session import engine as db_engine
+
+    retrieval_engine = VectorRetrievalEngine()
+    gate = GroundingGate()
+
+    async with db_engine.connect() as conn:
+        evidence = await retrieval_engine.search(
+            query="What does Lenny's Podcast say about quantum chromodynamics?",
+            top_k=5,
+            db=conn,
+        )
+
+    decision = gate.triage(evidence)
+    assert decision.tier == GroundingTier.INSUFFICIENT
+    assert decision.can_synthesize is False
+    assert decision.selected_evidence == []
+    assert decision.top_score < 0.65
+
+
+@pytest.mark.asyncio
+async def test_live_retrieval_lno_standalone_and_spaced_acronyms():
+    """
+    Verify standalone 'LNO framework' and spaced 'L N O framework'
+    pull Chunk #17 into the candidate pool and rank it at the top.
+    """
+    from app.db.session import engine as db_engine
+
+    retrieval_engine = VectorRetrievalEngine()
+
+    async with db_engine.connect() as conn:
+        for q in ["LNO framework", "L N O framework"]:
+            evidence = await retrieval_engine.search(query=q, top_k=3, db=conn)
+            assert len(evidence) > 0
+            top = evidence[0]
+            assert "Shreyas Doshi" in top.guest
+            assert top.chunk_index == 17
+            assert "LNO" in top.content
+
+
+@pytest.mark.asyncio
+async def test_live_retrieval_smart_excerpt_contains_lno_context():
+    """
+    Verify smart excerpt generation centers on the LNO framework occurrence
+    rather than dialogue preamble about sleep or stress.
+    """
+    from app.db.session import engine as db_engine
+
+    retrieval_engine = VectorRetrievalEngine()
+
+    async with db_engine.connect() as conn:
+        evidence = await retrieval_engine.search(
+            query="What is Shreyash Doshi's LNO framework?",
+            top_k=1,
+            db=conn,
+        )
+        assert len(evidence) > 0
+        top = evidence[0]
+        # Excerpt must contain the LNO definition or mention, not personal sleep preamble
+        assert "LNO" in top.excerpt
+        assert "talk to my wife" not in top.excerpt
+
+
+@pytest.mark.asyncio
+async def test_normal_shreyas_queries_continue_working():
+    """Verify general Shreyas Doshi queries continue returning relevant Shreyas episodes."""
+    from app.db.session import engine as db_engine
+
+    retrieval_engine = VectorRetrievalEngine()
+    gate = GroundingGate()
+
+    async with db_engine.connect() as conn:
+        evidence = await retrieval_engine.search(
+            query="What does Shreyas Doshi say about product management?",
+            top_k=5,
+            db=conn,
+        )
+        assert len(evidence) > 0
+        assert "Shreyas Doshi" in evidence[0].guest
+        assert evidence[0].similarity_score >= 0.70
+
+        decision = gate.triage(evidence)
+        assert decision.can_synthesize is True
+        assert decision.tier in (GroundingTier.LIMITED, GroundingTier.STRONG, GroundingTier.CONFLICTING)

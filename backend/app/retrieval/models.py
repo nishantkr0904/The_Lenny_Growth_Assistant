@@ -13,6 +13,23 @@ class GroundingTier(str, Enum):
     CONFLICTING = "Conflicting"
     INSUFFICIENT = "Insufficient"
 
+    @classmethod
+    def from_str(cls, val: object) -> "GroundingTier":
+        """Safely parse a string or enum into canonical GroundingTier."""
+        if isinstance(val, cls):
+            return val
+        if not val or not isinstance(val, str):
+            return cls.INSUFFICIENT
+        val_clean = val.strip().lower()
+        mapping = {
+            "strong": cls.STRONG,
+            "limited": cls.LIMITED,
+            "conflicting": cls.CONFLICTING,
+            "insufficient": cls.INSUFFICIENT,
+        }
+        return mapping.get(val_clean, cls.INSUFFICIENT)
+
+
 
 class EvidenceItem(BaseModel):
     """A single retrieved transcript chunk with source attribution and similarity score."""

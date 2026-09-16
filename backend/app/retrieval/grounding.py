@@ -57,21 +57,35 @@ class GroundingGate:
         if len(qualifying_chunks) < 2:
             return False, ""
 
-        distinct_guests = list(dict.fromkeys(c.guest for c in qualifying_chunks if c.guest))
+        def canonical_guest(name: str) -> str:
+            cleaned = re.sub(r"\s+(?:Live|\d+\.\d+|\d+)$", "", name, flags=re.IGNORECASE).strip()
+            return cleaned
+
+
+        distinct_guests = list(
+            dict.fromkeys(
+                canonical_guest(c.guest)
+                for c in qualifying_chunks
+                if c.guest and "lenny" not in c.guest.lower() and "various" not in c.guest.lower()
+            )
+        )
+
         if len(distinct_guests) < 2:
             return False, ""
 
         # Check if chunks from different guests display contrastive lexical signals
         guest_has_contrast: dict[str, bool] = {}
         for c in qualifying_chunks:
+            cg = canonical_guest(c.guest)
             has_signal = any(p.search(c.content) for p in CONTRAST_PATTERNS)
             if has_signal:
-                guest_has_contrast[c.guest] = True
+                guest_has_contrast[cg] = True
 
         # If contrast markers exist across chunks from differing guests
         if len(guest_has_contrast) >= 2 or (len(guest_has_contrast) >= 1 and len(distinct_guests) >= 2):
             guest_list_str = " and ".join(distinct_guests[:2])
             return True, f"Divergent perspectives identified between {guest_list_str}"
+
 
         return False, ""
 
@@ -136,8 +150,10 @@ class GroundingGate:
             )
 
         # Tier 1 or Tier 2b (top_score >= STRONG_THRESHOLD)
-        # Check for conflicting perspectives across qualifying chunks
-        is_conflicting, conflict_detail = self._detect_conflicting_perspectives(qualifying)
+        # Check for conflicting perspectives across qualifying chunks meeting strong relevance
+        strong_qualifying = [c for c in qualifying if c.similarity_score >= max(self.strong_threshold, top_score - 0.08)]
+        is_conflicting, conflict_detail = self._detect_conflicting_perspectives(strong_qualifying)
+
         if is_conflicting:
             logger.info("GroundingGate: Conflicting tier detected (%s)", conflict_detail)
             return GroundingDecision(

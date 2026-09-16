@@ -16,8 +16,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.citation import CitationValidator
+from app.agent.intent import classify_conversational_intent
 from app.agent.pi_bridge import PiBridgeClient, PiTurnResult
 from app.core.config import get_settings
+from app.providers.factory import get_generation_provider
 from app.retrieval.engine import VectorRetrievalEngine
 from app.retrieval.grounding import GroundingGate
 from app.retrieval.models import EvidenceItem, GroundingTier
@@ -27,6 +29,16 @@ from app.sessions.store import SessionStore
 
 logger = logging.getLogger("lenny_assistant.agent.orchestrator")
 settings = get_settings()
+
+CONVERSATIONAL_SYSTEM_PROMPT = (
+    "You are the Lenny Growth Assistant, a helpful AI companion focused on product management, "
+    "growth, and company-building wisdom from Lenny's Podcast transcripts. "
+    "The user is engaging in casual conversation (e.g., greeting, thanking, acknowledging, or saying goodbye). "
+    "Respond in a friendly, natural, and concise manner (1-2 sentences). "
+    "Acknowledge them warmly and invite them to ask questions about product strategy, growth frameworks, "
+    "metrics, or lessons from Lenny's guests. "
+    "Do not cite podcast transcripts, invent evidence, or create citations."
+)
 
 INSUFFICIENT_REFUSAL_TEXT = (
     "I could not find guidance on this topic in Lenny's Podcast transcripts. "
@@ -85,11 +97,59 @@ class QnAOrchestrator:
             content=user_content,
         )
 
-        # 3. Fetch bounded working context (last 6 messages)
+        # 3. Check conversational intent before retrieval / rewriting
+        intent_decision = classify_conversational_intent(user_content)
+        if intent_decision.is_conversational:
+            logger.info("Routing user message as conversational intent (%s)", intent_decision.sub_intent)
+            try:
+                provider = get_generation_provider()
+                conv_content = await provider.generate(
+                    messages=[{"role": "user", "content": user_content}],
+                    system_prompt=CONVERSATIONAL_SYSTEM_PROMPT,
+                    max_tokens=150,
+                    temperature=0.3,
+                )
+                conv_content = conv_content.strip()
+            except Exception as exc:
+                logger.warning("GenerationProvider failed for conversational turn: %s. Using fallback.", exc)
+                conv_content = (
+                    "Hello! I'm the Lenny Growth Assistant, here to help you explore insights, frameworks, "
+                    "and tactical wisdom from Lenny's Podcast. What product or growth challenge are you working through today?"
+                )
+
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=conv_content,
+                evidence_tier="Conversational",
+                latency_ms=elapsed_ms,
+                model_used=f"{settings.LLM_PROVIDER}/conversational",
+            )
+
+            return QnAResult(
+                session_id=session_id,
+                message_id=asst_msg.id,
+                role="assistant",
+                content=conv_content,
+                grounding={
+                    "tier": "Conversational",
+                    "can_synthesize": True,
+                    "top_score": 0.0,
+                    "agent": "conversational-router",
+                },
+                sources=[],
+                latency_ms=elapsed_ms,
+                model_used=f"{settings.LLM_PROVIDER}/conversational",
+            )
+
+        # 4. Fetch bounded working context (last 6 messages)
         history = await SessionStore.get_recent_messages(db, session_id, limit=6)
         prior_turns = history[:-1]  # Exclude current user prompt
 
-        # 4. Conversation-aware query rewriting
+        # 5. Conversation-aware query rewriting
         retrieval_query = await self.rewriter.rewrite(user_content, prior_turns)
 
         # 5. Format prior context for Pi agent session
@@ -133,7 +193,7 @@ class QnAOrchestrator:
             except Exception as exc:
                 logger.warning("Could not parse evidence item from Pi result: %s", exc)
 
-        tier_enum = GroundingTier(pi_result.tier) if pi_result.tier in [t.value for t in GroundingTier] else GroundingTier.INSUFFICIENT
+        tier_enum = GroundingTier.from_str(pi_result.tier)
 
         # 8. Post-generation citation validation
         cit_result = CitationValidator.validate_and_extract(
@@ -205,7 +265,62 @@ class QnAOrchestrator:
             content=user_content,
         )
 
-        # 3. Context & rewriting
+        # 3. Check conversational intent before retrieval / rewriting
+        intent_decision = classify_conversational_intent(user_content)
+        if intent_decision.is_conversational:
+            logger.info("Routing stream turn as conversational intent (%s)", intent_decision.sub_intent)
+            thinking_payload = {
+                "status": "processing",
+                "session_id": session_id,
+                "agent": "conversational-router",
+            }
+            yield f"event: thinking\ndata: {json.dumps(thinking_payload)}\n\n"
+
+            accumulated_text = ""
+            try:
+                provider = get_generation_provider()
+                async for token in provider.stream(
+                    messages=[{"role": "user", "content": user_content}],
+                    system_prompt=CONVERSATIONAL_SYSTEM_PROMPT,
+                    max_tokens=150,
+                    temperature=0.3,
+                ):
+                    accumulated_text += token
+                    yield f"event: delta\ndata: {json.dumps({'text': token})}\n\n"
+            except Exception as exc:
+                logger.warning("Streaming failed for conversational turn: %s. Emitting fallback.", exc)
+                fallback = (
+                    "Hello! I'm the Lenny Growth Assistant, here to help you explore insights, frameworks, "
+                    "and tactical wisdom from Lenny's Podcast. What product or growth challenge are you working through today?"
+                )
+                accumulated_text = fallback
+                yield f"event: delta\ndata: {json.dumps({'text': fallback})}\n\n"
+
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=accumulated_text.strip(),
+                evidence_tier="Conversational",
+                latency_ms=elapsed_ms,
+                model_used=f"{settings.LLM_PROVIDER}/conversational",
+            )
+
+            done_payload = {
+                "message_id": asst_msg.id,
+                "session_id": session_id,
+                "latency_ms": elapsed_ms,
+                "tier": "Conversational",
+                "can_synthesize": True,
+                "sources": [],
+                "agent": "conversational-router",
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+            return
+
+        # 4. Context & rewriting
         history = await SessionStore.get_recent_messages(db, session_id, limit=6)
         prior_turns = history[:-1]
 
@@ -294,7 +409,7 @@ class QnAOrchestrator:
             except Exception as exc:
                 logger.warning("Could not parse evidence item: %s", exc)
 
-        tier_enum = GroundingTier(final_pi_result.tier) if final_pi_result.tier in [t.value for t in GroundingTier] else GroundingTier.INSUFFICIENT
+        tier_enum = GroundingTier.from_str(final_pi_result.tier)
 
         # 6. Validate citations
         cit_result = CitationValidator.validate_and_extract(

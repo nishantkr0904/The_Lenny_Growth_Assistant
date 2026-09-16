@@ -1,4 +1,4 @@
-export type EvidenceTier = 'strong' | 'limited' | 'conflicting' | 'insufficient' | null;
+export type EvidenceTier = 'strong' | 'limited' | 'conflicting' | 'insufficient' | 'conversational' | 'Strong' | 'Limited' | 'Conflicting' | 'Insufficient' | 'Conversational' | null;
 
 export interface SourceReference {
   id?: string;

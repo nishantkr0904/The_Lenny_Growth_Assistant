@@ -16,7 +16,8 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
   onOpenSources,
   onCreateArtifact,
 }) => {
-  const isInsufficient = message.evidence_tier === 'insufficient';
+  const normalizedTier = message.evidence_tier?.toLowerCase();
+  const isInsufficient = normalizedTier === 'insufficient';
   const sources = message.sources || [];
 
   if (isInsufficient) {
@@ -60,8 +61,8 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
         </div>
       )}
 
-      {/* Artifact Action Bar */}
-      {!message.isStreaming && message.content && (
+      {/* Artifact Action Bar - only render for valid, non-refusal answers with evidence */}
+      {!message.isStreaming && message.content && !isInsufficient && sources.length > 0 && (
         <div className="pt-2 flex items-center space-x-2">
           <button
             onClick={() => onCreateArtifact(message)}
@@ -72,14 +73,12 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
             <span>Create Artifact</span>
           </button>
 
-          {sources.length > 0 && (
-            <button
-              onClick={() => onOpenSources(sources)}
-              className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-md transition"
-            >
-              <span>View All Sources ({sources.length})</span>
-            </button>
-          )}
+          <button
+            onClick={() => onOpenSources(sources)}
+            className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-md transition"
+          >
+            <span>View All Sources ({sources.length})</span>
+          </button>
         </div>
       )}
     </div>

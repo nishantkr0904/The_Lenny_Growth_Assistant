@@ -5,9 +5,10 @@ import { EvidenceIndicator } from '../components/chat/EvidenceIndicator';
 import { RefusalCard } from '../components/chat/RefusalCard';
 import { CitationBadge } from '../components/chat/CitationBadge';
 import { SourceDrawer } from '../components/chat/SourceDrawer';
+import { AnswerBlock } from '../components/chat/AnswerBlock';
 import { SafeHtmlPreview } from '../components/artifacts/SafeHtmlPreview';
 import { ArtifactViewer } from '../components/artifacts/ArtifactViewer';
-import { Artifact, HealthStatus, SourceReference } from '../types';
+import { Artifact, HealthStatus, Message, SourceReference } from '../types';
 
 describe('Header Component', () => {
   it('renders application title and provider badge for Ollama', () => {
@@ -37,7 +38,7 @@ describe('Header Component', () => {
 });
 
 describe('Grounding Trust UX Components', () => {
-  it('renders EvidenceIndicator correctly for Strong, Limited, and Conflicting tiers', () => {
+  it('renders EvidenceIndicator correctly for Strong, Limited, and Conflicting tiers (case-insensitive)', () => {
     const { rerender } = render(<EvidenceIndicator tier="strong" sourcesCount={2} />);
     expect(screen.getByText(/Strong Evidence · 2 sources/i)).toBeInTheDocument();
 
@@ -46,6 +47,16 @@ describe('Grounding Trust UX Components', () => {
 
     rerender(<EvidenceIndicator tier="conflicting" sourcesCount={3} />);
     expect(screen.getByText(/Contrasting Perspectives · 3 sources/i)).toBeInTheDocument();
+
+    // Verify capitalized values from backend
+    rerender(<EvidenceIndicator tier={'Strong' as any} sourcesCount={2} />);
+    expect(screen.getByText(/Strong Evidence · 2 sources/i)).toBeInTheDocument();
+
+    rerender(<EvidenceIndicator tier={'Limited' as any} sourcesCount={1} />);
+    expect(screen.getByText(/Limited Evidence · 1 source/i)).toBeInTheDocument();
+
+    rerender(<EvidenceIndicator tier={'Insufficient' as any} sourcesCount={0} />);
+    expect(screen.queryByText(/Evidence/i)).toBeNull();
   });
 
   it('renders RefusalCard for Insufficient evidence with zero hallucinations', () => {
@@ -54,6 +65,121 @@ describe('Grounding Trust UX Components', () => {
     expect(screen.getByText(/Insufficient Corpus Evidence/i)).toBeInTheDocument();
     expect(screen.getByText(refusalText)).toBeInTheDocument();
     expect(screen.getByText(/Zero ungrounded speculation is permitted/i)).toBeInTheDocument();
+  });
+
+  it('AnswerBlock renders RefusalCard and omits Create Artifact button on Insufficient tier', () => {
+    const refusalMessage: Message = {
+      id: 'msg-refusal',
+      session_id: 'sess-1',
+      role: 'assistant',
+      content: 'There is no information about quantum chromodynamics in Lenny\'s Podcast.',
+      evidence_tier: 'Insufficient' as any,
+      sources: [],
+      created_at: new Date().toISOString(),
+    };
+
+    const onCreateArtifact = vi.fn();
+    const onOpenSources = vi.fn();
+
+    const { rerender } = render(
+      <AnswerBlock
+        message={refusalMessage}
+        onCreateArtifact={onCreateArtifact}
+        onOpenSources={onOpenSources}
+      />
+    );
+
+    // Must render RefusalCard
+    expect(screen.getByText(/Insufficient Corpus Evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/There is no information about quantum chromodynamics/i)).toBeInTheDocument();
+
+    // Must NOT render Create Artifact button
+    expect(screen.queryByRole('button', { name: /Create Artifact/i })).toBeNull();
+    expect(screen.queryByText(/Create Artifact/i)).toBeNull();
+
+    // Also test lowercase 'insufficient'
+    rerender(
+      <AnswerBlock
+        message={{ ...refusalMessage, evidence_tier: 'insufficient' }}
+        onCreateArtifact={onCreateArtifact}
+        onOpenSources={onOpenSources}
+      />
+    );
+    expect(screen.getByText(/Insufficient Corpus Evidence/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Create Artifact/i)).toBeNull();
+  });
+
+  it('AnswerBlock renders Create Artifact button only when valid evidence and sources exist', () => {
+    const validMessage: Message = {
+      id: 'msg-valid',
+      session_id: 'sess-1',
+      role: 'assistant',
+      content: 'Shreyas Doshi describes the LNO framework as Leverage, Neutral, and Overhead tasks.',
+      evidence_tier: 'Limited' as any,
+      sources: [
+        {
+          chunk_id: 'c-1',
+          title: 'The art of product management',
+          guest: 'Shreyas Doshi',
+          similarity_score: 0.737,
+          quoted_excerpt: 'L tasks are leverage tasks...',
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const onCreateArtifact = vi.fn();
+    const onOpenSources = vi.fn();
+
+    render(
+      <AnswerBlock
+        message={validMessage}
+        onCreateArtifact={onCreateArtifact}
+        onOpenSources={onOpenSources}
+      />
+    );
+
+    // Must render valid content and Create Artifact button
+    expect(screen.getByText(/Shreyas Doshi describes the LNO framework/i)).toBeInTheDocument();
+    const ctaButton = screen.getByRole('button', { name: /Create Artifact/i });
+    expect(ctaButton).toBeInTheDocument();
+
+    fireEvent.click(ctaButton);
+    expect(onCreateArtifact).toHaveBeenCalledWith(validMessage);
+  });
+
+  it('AnswerBlock renders Conversational turn without RefusalCard, EvidenceIndicator, or Create Artifact', () => {
+    const convMessage: Message = {
+      id: 'msg-conv',
+      session_id: 'sess-1',
+      role: 'assistant',
+      content: 'Hello! How can I help you explore product and growth insights today?',
+      evidence_tier: 'Conversational' as any,
+      sources: [],
+      created_at: new Date().toISOString(),
+    };
+
+    const onCreateArtifact = vi.fn();
+    const onOpenSources = vi.fn();
+
+    render(
+      <AnswerBlock
+        message={convMessage}
+        onCreateArtifact={onCreateArtifact}
+        onOpenSources={onOpenSources}
+      />
+    );
+
+    // Displays natural prose content
+    expect(screen.getByText(/Hello! How can I help you explore product and growth insights today\?/i)).toBeInTheDocument();
+
+    // Must NOT render RefusalCard
+    expect(screen.queryByText(/Insufficient Corpus Evidence/i)).toBeNull();
+
+    // Must NOT render Evidence badges or Create Artifact CTA
+    expect(screen.queryByText(/Evidence/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Create Artifact/i })).toBeNull();
+    expect(screen.queryByText(/Sources:/i)).toBeNull();
   });
 
   it('renders CitationBadge and triggers click handler to open drawer', () => {

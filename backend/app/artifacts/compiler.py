@@ -75,7 +75,7 @@ class ArtifactCompiler:
         content: str,
         sources: List[Dict[str, Any]],
     ) -> str:
-        """Compile a structured Markdown research brief."""
+        """Compile a structured Markdown research brief grounded exclusively in evidence."""
         lines = [
             f"# {title}",
             "",
@@ -85,15 +85,23 @@ class ArtifactCompiler:
             "",
             content.strip(),
             "",
+        ]
+        lines.extend([
             "## Key Strategic Insights",
             "",
-            "- **Core Principle:** Focus on validated feedback loops rather than vanity expansion.",
-            "- **Decision Framework:** Balance tactical execution with customer discovery.",
-            "- **Implementation Guardrails:** Establish measurable milestones before scaling spend.",
+        ])
+
+        paragraphs = [p.strip() for p in content.strip().split("\n\n") if p.strip()]
+        if len(paragraphs) > 1:
+            for p in paragraphs[1:]:
+                lines.append(p if p.startswith("-") or p.startswith("*") else f"- {p}")
+        elif paragraphs:
+            lines.append(f"- {paragraphs[0]}")
+        lines.extend([
             "",
             "## Source Citations & Provenance",
             "",
-        ]
+        ])
 
         if sources:
             for idx, src in enumerate(sources, 1):
@@ -139,27 +147,17 @@ class ArtifactCompiler:
             "",
             "## 1. The Hook: Why Most Teams Get This Backwards",
             "",
-            f"Most founders and growth leaders treat {topic.lower() if topic else 'growth'} as an optimization problem. "
-            "They tweak funnels, fiddle with button colors, and run endless A/B tests that yield 2% incremental bumps.",
+            f"Most founders and operators treat {topic.lower() if topic else 'product growth'} through intuition or trial and error. "
+            "They focus on downstream execution without establishing clear mental models or foundational decision criteria.",
             "",
-            f"**Here is the uncomfortable truth: You cannot optimize your way out of a foundational strategy error.**",
+            "**Here is the core truth: Frameworks from battle-tested operators exist to prevent wasted motion.**",
             "",
-            f"When {primary_guest} sat down with Lenny Rachitsky on *{episode_title}*, they dismantled this conventional wisdom. "
-            "Instead of chasing vanity metrics or superficial hacks, the world's most enduring technology companies operate from "
-            "first principles that seem almost counterintuitive to outsiders.",
-            "",
-            "If you feel like you are pushing a boulder uphill, you are probably making one of three critical mistakes.",
+            f"When {primary_guest} sat down with Lenny Rachitsky on *{episode_title}*, they broke down the practical reality "
+            "of how high-impact teams operate under real-world constraints.",
             "",
             "---",
             "",
-            "## 2. The Core Friction: Exploration vs. Premature Exploitation",
-            "",
-            "The fundamental tension in modern company building is the battle between two operating modes:",
-            "",
-            "1. **Exploration Mode:** Aggressively discovering truth, testing hypothesis boundaries, and staying radically open to surprise.",
-            "2. **Exploitation Mode:** Ruthlessly scaling what is already proven, driving efficiency, and wringing out unit economics.",
-            "",
-            f"As {primary_guest} explained during the interview:",
+            "## 2. Core Insights & Evidence",
             "",
         ]
 
@@ -169,62 +167,31 @@ class ArtifactCompiler:
                 f"> — **{primary_guest}**, *{episode_title}*",
                 "",
             ])
-        else:
-            essay_sections.extend([
-                f"> \"You have to know which mode you are in. If you exploit when you should explore, you optimize a dead end.\" — **{primary_guest}**",
-                "",
-            ])
 
         essay_sections.extend([
-            "When teams confuse these two modes, disaster ensues. They hire an enterprise sales team before achieving true "
-            "pull, or they keep redesigning the core workflow when they should be aggressively opening acquisition loops. "
-            "Let's break down the exact playbook used by elite operators to navigate this friction.",
-            "",
-            "---",
-            "",
-            "## 3. The 4-Part Tactical Playbook",
+            "## 3. The Tactical Playbook",
             "",
             content.strip(),
             "",
-            "### Pillar I: Identify the Boiling Frog Dynamic",
-            "",
-            "Slow degradation is far more lethal than sudden crisis. When customer sentiment drifts downward or retention "
-            "softens by half a percent each month, organizations tend to normalize the discomfort. Elite leaders install "
-            "tripwires: non-negotiable threshold metrics that automatically trigger strategic reviews before the water boils.",
-            "",
-            "### Pillar II: Force Structural Clarity Before Speed",
-            "",
-            "Speed without direction is just accelerated failure. Before allocating engineering cycles or marketing capital, "
-            "write down the causal mechanism: *Why will this specific action create durable value for the customer?* If the logic "
-            "requires more than two leaps of faith, strip it back.",
-            "",
-            "### Pillar III: Establish High-Frequency Learning Loops",
-            "",
-            "Do not wait for quarterly business reviews to validate assumptions. The best teams run experiments in weekly cadences. "
-            "Each cycle must produce either a validated lift or a discarded hypothesis with documented reasoning.",
-            "",
-            "### Pillar IV: Protect the Core While Experimenting on the Edges",
-            "",
-            "80% of your resources must relentlessly defend and compound your core engine. Reserve the remaining 20% for asymmetric "
-            "bets that could reinvent your category if successful.",
-            "",
             "---",
             "",
-            "## 4. The Actionable Takeaway: What to Do on Monday Morning",
+            "## 4. Actionable Takeaway: What to Do on Monday Morning",
             "",
-            "Do not try to overhaul your entire operating system tomorrow. Start with this singular 30-minute exercise:",
+            f"Implementing insights from {primary_guest} requires deliberate execution:",
             "",
-            "1. **Audit your top 3 current initiatives.** Ask yourself: *Is this initiative in Explore mode or Exploit mode?*",
-            "2. **Check your measurement criteria.** Are you applying efficiency metrics to an exploratory project, or exploratory leeway to an exploitation task?",
-            "3. **Align your team on the mode.** Have the explicit conversation with your team and leadership. Naming the mode instantly clears up 80% of cross-functional friction.",
+            "1. **Audit current practices** against the principles discussed above.",
+            "2. **Identify immediate high-impact areas** where these findings apply directly to your team or product priorities.",
+            "3. **Align cross-functional stakeholders** to ensure shared context across your organization.",
             "",
-            "Grounded insights from operators who have been there save years of wasted motion. Pick your mode, commit to the truth, and execute.",
+            "Grounded insights from experienced leaders save months of misdirected effort. Commit to the principles and execute.",
             "",
             "---",
             "",
             "### Sources & Attribution",
             "",
         ])
+
+
 
         if sources:
             for idx, s in enumerate(sources, 1):

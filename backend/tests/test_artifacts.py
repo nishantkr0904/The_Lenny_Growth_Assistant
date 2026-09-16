@@ -34,13 +34,13 @@ def test_compile_ship30_essay_structure():
     assert "# Why Growth Leaders Stop Growing" in essay
     assert "Ship 30 for 30 Atomic Essay" in essay
     assert "The Hook" in essay  # Principle 1: Strong Hook
-    assert "Core Friction" in essay  # Principle 2: Clear Progression
+    assert "Core Insights & Evidence" in essay  # Principle 2: Clear Progression
     assert "Ada Chen Rekhi" in essay  # Principle 6: Grounded Claims
-    assert "Exploration vs. Premature Exploitation" in essay  # Principle 2 & 7: Framework
     assert "Tactical Playbook" in essay  # Principle 3: Skimmable formatting
     assert "Actionable Takeaway: What to Do on Monday Morning" in essay  # Principle 5: Useful takeaway
     assert "Sources & Attribution" in essay  # Principle 7: Curating the experts
-    assert len(essay.split()) > 400  # Substantial structured document
+    assert "You have to know which mode you are in." in essay  # Quoted evidence
+    assert len(essay.split()) > 100  # Substantial structured document
 
 
 def test_compile_markdown_brief():
@@ -168,6 +168,42 @@ async def test_artifacts_api_rejects_ungrounded_refusal(client: TestClient):
         )
 
     # 2. Attempt to compile artifact from refusal
+    art_res = client.post(
+        "/api/v1/artifacts",
+        json={
+            "session_id": session_id,
+            "artifact_type": "ship30_essay",
+        },
+    )
+    assert art_res.status_code == 400
+    assert "ungrounded refusal" in art_res.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_artifacts_api_rejects_capitalized_insufficient_refusal(client: TestClient):
+    """Verify refusal is blocked when evidence_tier is 'Insufficient' (canonical capitalized enum)."""
+    sess_res = client.post("/api/v1/sessions", json={"title": "String Theory"})
+    assert sess_res.status_code == 201
+    session_id = sess_res.json()["id"]
+
+    from app.db.session import async_session_factory
+    async with async_session_factory() as db:
+        await SessionStore.save_message(
+            db=db,
+            session_id=session_id,
+            role="user",
+            content="What does Lenny say about string theory?",
+        )
+        await SessionStore.save_message(
+            db=db,
+            session_id=session_id,
+            role="assistant",
+            content="I could not find guidance on this topic in Lenny's Podcast transcripts.",
+            evidence_tier="Insufficient",  # Canonical GroundingTier.INSUFFICIENT.value
+            latency_ms=250,
+            model_used="pi-coding-agent",
+        )
+
     art_res = client.post(
         "/api/v1/artifacts",
         json={

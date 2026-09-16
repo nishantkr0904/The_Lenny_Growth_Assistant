@@ -151,12 +151,13 @@ export const AppShell: React.FC = () => {
         },
         onEvidence: (data) => {
           setStatusText(`Evidence evaluation: Tier ${data.tier.toUpperCase()} (${Math.round(data.score * 100)}% match)`);
+          const normalizedTier = (data.tier ? data.tier.toLowerCase() : undefined) as any;
           setActiveSession((prev) => {
             if (!prev) return null;
             return {
               ...prev,
               messages: prev.messages.map((m) =>
-                m.id === assistantMessageId ? { ...m, evidence_tier: data.tier as any } : m
+                m.id === assistantMessageId ? { ...m, evidence_tier: normalizedTier } : m
               ),
             };
           });
@@ -176,6 +177,7 @@ export const AppShell: React.FC = () => {
         onDone: (data) => {
           setIsLoading(false);
           setStatusText('');
+          const normalizedTier = (data.tier ? data.tier.toLowerCase() : undefined) as any;
           setActiveSession((prev) => {
             if (!prev) return null;
             return {
@@ -187,7 +189,7 @@ export const AppShell: React.FC = () => {
                       id: data.message_id || m.id,
                       isStreaming: false,
                       sources: data.sources || [],
-                      evidence_tier: (data.tier as any) || m.evidence_tier,
+                      evidence_tier: normalizedTier || m.evidence_tier,
                       latency_ms: data.latency_ms,
                     }
                   : m
