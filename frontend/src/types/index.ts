@@ -70,3 +70,16 @@ export interface HealthStatus {
 }
 
 export type RightPanelView = 'sources' | 'artifact' | null;
+
+export interface ProviderInfo {
+  id: 'ollama' | 'anthropic';
+  name: string;
+  type: 'local' | 'cloud';
+  model: string;
+  configured: boolean;
+}
+
+export interface ProviderStatusResponse {
+  active_provider: 'ollama' | 'anthropic';
+  providers: ProviderInfo[];
+}

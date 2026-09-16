@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Header } from '../components/layout/Header';
+import { SessionSidebar } from '../components/sessions/SessionSidebar';
 import { EvidenceIndicator } from '../components/chat/EvidenceIndicator';
 import { RefusalCard } from '../components/chat/RefusalCard';
 import { CitationBadge } from '../components/chat/CitationBadge';
@@ -8,7 +9,7 @@ import { SourceDrawer } from '../components/chat/SourceDrawer';
 import { AnswerBlock } from '../components/chat/AnswerBlock';
 import { SafeHtmlPreview } from '../components/artifacts/SafeHtmlPreview';
 import { ArtifactViewer } from '../components/artifacts/ArtifactViewer';
-import { Artifact, HealthStatus, Message, SourceReference } from '../types';
+import { Artifact, HealthStatus, Message, Session, SourceReference } from '../types';
 
 describe('Header Component', () => {
   it('renders application title and provider badge for Ollama', () => {
@@ -34,6 +35,44 @@ describe('Header Component', () => {
     };
     render(<Header health={health} onNewSession={() => {}} />);
     expect(screen.getByText('Anthropic (Claude 3.5 Sonnet)')).toBeInTheDocument();
+  });
+
+  it('toggles provider menu and shows options when badge is clicked', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'ollama',
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    const badgeButton = screen.getByRole('button', { name: /Select LLM generation provider/i });
+    fireEvent.click(badgeButton);
+
+    expect(screen.getByText('Generation Provider')).toBeInTheDocument();
+    expect(screen.getByText(/Ollama · Local/i)).toBeInTheDocument();
+    expect(screen.getByText(/Anthropic · Cloud/i)).toBeInTheDocument();
+  });
+
+  it('toggles dark mode theme and adds dark class to documentElement', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'ollama',
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    const themeBtn = screen.getByRole('button', { name: /Switch to dark mode|Switch to light mode/i });
+    expect(themeBtn).toBeInTheDocument();
+
+    // Toggle theme
+    fireEvent.click(themeBtn);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+    // Toggle back
+    fireEvent.click(themeBtn);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
 
@@ -257,5 +296,89 @@ describe('Security & Sandboxed Artifact Viewer', () => {
     const previewTab = screen.getByRole('button', { name: /Preview/i });
     fireEvent.click(previewTab);
     expect(previewTab).toBeInTheDocument();
+  });
+});
+
+describe('SessionSidebar Component', () => {
+  const sampleSessions: Session[] = [
+    {
+      id: 'sess-1',
+      title: 'Growth Loops Research',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      message_count: 4,
+    },
+    {
+      id: 'sess-2',
+      title: 'PLG Metrics Exploration',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      message_count: 2,
+    },
+  ];
+
+  it('renders research sessions list and highlights active session', () => {
+    render(
+      <SessionSidebar
+        sessions={sampleSessions}
+        activeSessionId="sess-1"
+        onSelectSession={() => {}}
+        onDeleteSession={() => {}}
+        onNewSession={() => {}}
+        isOpen={true}
+        onToggle={() => {}}
+      />
+    );
+    expect(screen.getByText('Growth Loops Research')).toBeInTheDocument();
+    expect(screen.getByText('PLG Metrics Exploration')).toBeInTheDocument();
+  });
+
+  it('calls onDeleteSession with stopPropagation when delete button is clicked', () => {
+    const handleSelect = vi.fn();
+    const handleDelete = vi.fn();
+
+    render(
+      <SessionSidebar
+        sessions={sampleSessions}
+        activeSessionId="sess-1"
+        onSelectSession={handleSelect}
+        onDeleteSession={handleDelete}
+        onNewSession={() => {}}
+        isOpen={true}
+        onToggle={() => {}}
+      />
+    );
+
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete session/i });
+    expect(deleteButtons.length).toBe(2);
+
+    // Click delete on first session
+    fireEvent.click(deleteButtons[0]);
+
+    // Verify delete was called with session id
+    expect(handleDelete).toHaveBeenCalledWith('sess-1');
+    // Verify select was NOT called due to stopPropagation
+    expect(handleSelect).not.toHaveBeenCalled();
+  });
+
+  it('calls onSelectSession when session item is clicked', () => {
+    const handleSelect = vi.fn();
+
+    render(
+      <SessionSidebar
+        sessions={sampleSessions}
+        activeSessionId="sess-1"
+        onSelectSession={handleSelect}
+        onDeleteSession={() => {}}
+        onNewSession={() => {}}
+        isOpen={true}
+        onToggle={() => {}}
+      />
+    );
+
+    const sessionItem = screen.getByText('PLG Metrics Exploration');
+    fireEvent.click(sessionItem);
+
+    expect(handleSelect).toHaveBeenCalledWith('sess-2');
   });
 });

@@ -263,7 +263,7 @@ export const AppShell: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-screen bg-slate-100 dark:bg-slate-950 overflow-hidden font-sans transition-colors">
       <Header health={health} onNewSession={handleNewSession} />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -279,7 +279,7 @@ export const AppShell: React.FC = () => {
         />
 
         {/* Center Conversation Workspace */}
-        <main className="flex-1 flex flex-col h-full bg-slate-50 min-w-0 overflow-hidden relative">
+        <main className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 min-w-0 overflow-hidden relative transition-colors">
           <ConversationView
             messages={activeSession?.messages || []}
             isLoading={isLoading}

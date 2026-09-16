@@ -44,28 +44,28 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
   };
 
   return (
-    <aside className="w-full md:w-[480px] lg:w-[580px] xl:w-[680px] border-l border-slate-200 bg-white flex flex-col h-full shadow-xl z-20 shrink-0">
+    <aside className="w-full md:w-[480px] lg:w-[580px] xl:w-[680px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full shadow-xl z-20 shrink-0 transition-colors">
       {/* Viewer Header */}
-      <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+      <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
         <div className="flex items-center space-x-2 truncate mr-2">
           <Sparkles className="w-4 h-4 text-brand-500 shrink-0" />
-          <h2 className="text-xs font-semibold text-slate-800 truncate" title={artifact.title}>
+          <h2 className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={artifact.title}>
             {artifact.title}
           </h2>
-          <span className="text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-medium shrink-0 uppercase tracking-wider">
+          <span className="text-[10px] bg-brand-100 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 px-1.5 py-0.5 rounded font-medium shrink-0 uppercase tracking-wider">
             {artifact.artifact_type.replace('_', ' ')}
           </span>
         </div>
 
         <div className="flex items-center space-x-1.5 shrink-0">
           {/* View Mode Toggle */}
-          <div className="flex bg-slate-200/80 p-0.5 rounded-lg text-[11px] font-medium">
+          <div className="flex bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-lg text-[11px] font-medium">
             <button
               onClick={() => setViewMode('preview')}
               className={`px-2.5 py-1 rounded-md transition flex items-center space-x-1 ${
                 viewMode === 'preview'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               <Eye className="w-3 h-3" />
@@ -75,8 +75,8 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
               onClick={() => setViewMode('source')}
               className={`px-2.5 py-1 rounded-md transition flex items-center space-x-1 ${
                 viewMode === 'source'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               <Code2 className="w-3 h-3" />
@@ -86,7 +86,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
 
           <button
             onClick={handleCopy}
-            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition"
+            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition"
             title="Copy to clipboard"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
@@ -94,7 +94,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
 
           <button
             onClick={handleDownload}
-            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition"
+            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition"
             title="Download file"
           >
             <Download className="w-4 h-4" />
@@ -102,7 +102,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition"
             title="Close viewer"
           >
             <X className="w-4 h-4" />
@@ -111,7 +111,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
       </div>
 
       {/* Trust & Isolation Boundary */}
-      <div className="px-3 py-1.5 bg-slate-100/70 border-b border-slate-200 text-[10px] text-slate-500 flex items-center justify-between">
+      <div className="px-3 py-1.5 bg-slate-100/70 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
         <div className="flex items-center space-x-1.5">
           <ShieldAlert className="w-3 h-3 text-slate-400" />
           <span>Generated Content · Sandboxed Execution (Null Origin · No Script Permissions)</span>
@@ -120,7 +120,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden relative bg-slate-50">
+      <div className="flex-1 overflow-hidden relative bg-slate-50 dark:bg-slate-900">
         {viewMode === 'preview' ? (
           isHtml ? (
             <SafeHtmlPreview htmlContent={artifact.content_html!} />

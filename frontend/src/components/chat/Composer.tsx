@@ -44,9 +44,9 @@ export const Composer: React.FC<ComposerProps> = ({ onSendMessage, isLoading, di
   };
 
   return (
-    <div className="p-3 sm:p-4 bg-white border-t border-slate-200">
+    <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 transition-colors">
       <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-end space-x-2">
-        <div className="flex-1 relative rounded-lg border border-slate-300 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 bg-white transition shadow-2xs">
+        <div className="flex-1 relative rounded-lg border border-slate-300 dark:border-slate-700 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 bg-white dark:bg-slate-800 transition shadow-2xs">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -55,7 +55,7 @@ export const Composer: React.FC<ComposerProps> = ({ onSendMessage, isLoading, di
             onKeyDown={handleKeyDown}
             disabled={disabled || isLoading}
             placeholder="Ask a question grounded in Lenny's Podcast transcripts..."
-            className="w-full resize-none bg-transparent px-3 py-2.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none max-h-44 min-h-[44px]"
+            className="w-full resize-none bg-transparent px-3 py-2.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none max-h-44 min-h-[44px]"
             aria-label="Ask a research question"
           />
         </div>
@@ -65,7 +65,7 @@ export const Composer: React.FC<ComposerProps> = ({ onSendMessage, isLoading, di
           disabled={!input.trim() || isLoading || disabled}
           className={`h-11 px-4 rounded-lg flex items-center justify-center font-medium text-xs sm:text-sm text-white transition shadow-sm shrink-0 ${
             !input.trim() || isLoading || disabled
-              ? 'bg-slate-300 cursor-not-allowed text-slate-500'
+              ? 'bg-slate-300 dark:bg-slate-800 cursor-not-allowed text-slate-500 dark:text-slate-600'
               : 'bg-brand-500 hover:bg-brand-600 active:bg-brand-700'
           }`}
           aria-label="Send message"

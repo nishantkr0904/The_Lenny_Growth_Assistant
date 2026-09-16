@@ -76,6 +76,9 @@ The Lenny Growth Assistant eliminates these bottlenecks by grounding every answe
 - **Ship 30 for 30 essays:** Transforms grounded research into ~1,250-word structured essays following 7 core Ship 30 principles (hook, clear thesis, 1-3-1 cadence, single-sentence paragraphs, bullet transitions, and actionable takeaways).
 - **Markdown & HTML/CSS artifacts:** Compiles executive summaries, decision matrices, and visual cards rendered alongside the chat.
 - **Artifact workspace:** Live preview, raw source inspection, one-click clipboard copying, and file export (`.md` / `.html`).
+- **Interactive Provider Selector & Cloud API Key Configuration:** Switch between `Ollama · Local` (`llama3.1:8b`) and `Anthropic · Cloud` (`claude-3-5-sonnet`) directly in the UI Header. Evaluators can configure their Anthropic API key via an in-app popover modal without modifying `.env` or restarting containers. Strictly enforces zero silent fallback if cloud credentials are missing.
+- **Session Lifecycle & Cascade Deletion:** Create and switch between multiple research sessions, or delete individual sessions with a single click in the sidebar, with automated relational cascade across messages, sources, and artifacts in PostgreSQL.
+- **Adaptive Light / Dark Mode:** Full UI theme switcher (Sun / Moon) in the header with high-contrast, polished styling across chat, sidebar, citation drawers, and artifact viewers, persisted in browser `localStorage`.
 - **Local-first with cloud flexibility:** Runs 100% locally with Ollama (`llama3.1:8b`) with zero cloud dependencies or API keys required, while supporting clean configuration-driven switching to Anthropic Claude.
 
 ---
@@ -379,7 +382,7 @@ The backend suite covers API routing, GroundingGate evaluation, Pi RPC bridge co
 docker compose exec backend pytest -v
 ```
 
-**Result: 111 passed in 6.5s**
+**Result: 114 passed in 6.8s**
 
 | Test Module | Tests | Scope Covered | Status |
 |:---|:---|:---|:---|
@@ -395,13 +398,13 @@ docker compose exec backend pytest -v
 | `test_ingestion.py` | 4 | Pipeline execution, idempotency, deduplication | **PASS** |
 | `test_parser.py` | 4 | Frontmatter extraction, metadata normalization | **PASS** |
 | `test_pi_bridge.py` | 10 | Stdio JSON-RPC lifecycle, tool query preservation, compound routing | **PASS** |
-| `test_providers.py` | 6 | Ollama adapter, Anthropic provider, missing-key failure | **PASS** |
+| `test_providers.py` | 9 | Ollama adapter, Anthropic provider, dynamic provider switching, key isolation | **PASS** |
 | `test_qna_api.py` | 5 | Q&A endpoints, empty query rejection, SSE headers | **PASS** |
 | `test_retrieval.py` | 23 | HNSW cosine search, GroundingGate tiers, uppercase acronym boost | **PASS** |
 | `test_rewriter.py` | 5 | Conversational pronoun resolution, multi-turn state | **PASS** |
 | `test_security_sanitization.py` | 6 | Bleach script stripping, event handler removal, CSP injection | **PASS** |
-| `test_sessions.py` | 3 | Session CRUD, multi-session isolation | **PASS** |
-| **Total Backend** | **111** | **Complete backend coverage** | **PASS** |
+| `test_sessions.py` | 4 | Session CRUD, multi-session isolation, cascading session deletion | **PASS** |
+| **Total Backend** | **114** | **Complete backend coverage** | **PASS** |
 
 ### 2. Automated Frontend Test Suite (Vitest)
 
@@ -409,7 +412,7 @@ docker compose exec backend pytest -v
 cd frontend && npm test
 ```
 
-**Result: 11 passed (11 tests in `components.test.tsx`)**
+**Result: 16 passed (16 tests in `components.test.tsx`)**
 - Chat interface rendering and input submission
 - Live token streaming state transitions
 - Citation badge rendering and click interactions
@@ -417,10 +420,15 @@ cd frontend && npm test
 - Artifact Viewer tab toggling (Preview vs. Source)
 - Copy-to-clipboard action with visual toast
 - Session list navigation and new session creation
+- Session deletion with relational cascade and event isolation
 - Grounding status badge display (`Strong`, `Limited`, `Contrasting`, `Insufficient`)
 - Conversational greeting display without refusal card or citation badges
 - Refusal card display on out-of-domain queries
 - Create Artifact action gating on valid grounded evidence
+- Provider selector popover rendering and active state toggle
+- Cloud Anthropic API key configuration modal, validation, and status masking
+- Light / Dark Mode toggle button rendering and theme switching
+- Theme preference persistence across application reloads (`localStorage`)
 
 ### 3. Manual UI Verification Matrix
 

@@ -106,3 +106,63 @@ async def test_source_references_persistence():
         assert detail.messages[0].sources[0].chunk_id == chunk_id
         assert detail.messages[0].sources[0].similarity_score == 0.88
         assert detail.messages[0].sources[0].quoted_excerpt == "Onboarding is the most critical lever."
+
+
+@pytest.mark.asyncio
+async def test_session_deletion_cascade():
+    """Verify deleting a session cascades to messages and sources."""
+    async with async_session_factory() as session:
+        created = await SessionStore.create_session(session, title="Session to Delete")
+        sid = created.id
+
+        msg = await SessionStore.save_message(
+            db=session,
+            session_id=sid,
+            role="user",
+            content="Temporary message",
+        )
+
+        # Confirm message exists
+        check_msg = await session.execute(text("SELECT id FROM messages WHERE session_id = :sid;"), {"sid": sid})
+        assert check_msg.fetchone() is not None
+
+        # Delete session
+        deleted = await SessionStore.delete_session(session, sid)
+        assert deleted is True
+
+        # Verify session is gone
+        fetched = await SessionStore.get_session(session, sid)
+        assert fetched is None
+
+        # Verify messages cascaded
+        check_msg_after = await session.execute(text("SELECT id FROM messages WHERE session_id = :sid;"), {"sid": sid})
+        assert check_msg_after.fetchone() is None
+
+        # Deleting again returns False
+        deleted_again = await SessionStore.delete_session(session, sid)
+        assert deleted_again is False
+
+
+def test_session_delete_api():
+    """Verify DELETE /api/v1/sessions/{session_id} returns 204 then 404."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+
+    # 1. Create a session
+    create_resp = client.post("/api/v1/sessions", json={"title": "API Delete Test"})
+    assert create_resp.status_code == 201
+    sid = create_resp.json()["id"]
+
+    # 2. Delete it
+    del_resp = client.delete(f"/api/v1/sessions/{sid}")
+    assert del_resp.status_code == 204
+
+    # 3. Verify 404 on GET
+    get_resp = client.get(f"/api/v1/sessions/{sid}")
+    assert get_resp.status_code == 404
+
+    # 4. Verify 404 on subsequent DELETE
+    del_resp_again = client.delete(f"/api/v1/sessions/{sid}")
+    assert del_resp_again.status_code == 404

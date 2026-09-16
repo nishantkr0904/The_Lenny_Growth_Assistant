@@ -6,6 +6,7 @@ from typing import Optional
 from app.core.config import get_settings
 from app.providers.anthropic import AnthropicGenerationProvider
 from app.providers.base import GenerationProvider, ProviderConfigurationError
+from app.providers.manager import ProviderManager
 from app.providers.ollama import OllamaGenerationProvider
 
 logger = logging.getLogger("lenny_assistant.providers.factory")
@@ -17,13 +18,14 @@ def get_generation_provider(provider_name: Optional[str] = None) -> GenerationPr
     Resolve and instantiate the configured GenerationProvider.
     Enforces strict configuration validation: never silently falls back to Ollama if a cloud provider fails.
     """
-    selected = (provider_name or settings.LLM_PROVIDER).strip().lower()
+    manager = ProviderManager.get_instance()
+    selected = (provider_name or manager.get_active_provider()).strip().lower()
 
     if selected == "ollama":
         return OllamaGenerationProvider()
 
     if selected == "anthropic":
-        return AnthropicGenerationProvider()
+        return AnthropicGenerationProvider(api_key=manager.get_anthropic_api_key())
 
     if selected == "openai":
         raise ProviderConfigurationError(

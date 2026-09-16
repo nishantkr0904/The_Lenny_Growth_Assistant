@@ -115,3 +115,22 @@ async def send_message(
         db=db,
     )
     return result
+
+
+@router.delete(
+    "/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a conversation session and all cascading data",
+)
+async def delete_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete a conversation session, cascading to messages, sources, and artifacts."""
+    deleted = await SessionStore.delete_session(db=db, session_id=session_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+    return None

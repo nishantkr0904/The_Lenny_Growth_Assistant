@@ -45,33 +45,33 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col items-center justify-center text-center">
         <div className="max-w-md space-y-6">
-          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto shadow-xs border border-brand-100">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400 flex items-center justify-center mx-auto shadow-xs border border-brand-100 dark:border-brand-900">
             <Sparkles className="w-6 h-6" />
           </div>
 
           <div className="space-y-1.5">
-            <h2 className="text-base font-semibold text-slate-800">
+            <h2 className="text-base font-semibold text-slate-800 dark:text-slate-200">
               Grounded Growth & Strategy Research
             </h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               Every factual assertion is strictly retrieved from Lenny Rachitsky's podcast interviews with top operators and leaders.
             </p>
           </div>
 
           <div className="space-y-2 pt-2 text-left">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider pl-1">
               Suggested Research Questions
             </span>
             {EXAMPLE_PROMPTS.map((item, idx) => (
               <button
                 key={idx}
                 onClick={() => onSelectPrompt(item.query)}
-                className="w-full p-3 rounded-lg border border-slate-200 hover:border-brand-300 bg-white hover:bg-brand-50/40 text-left transition shadow-2xs group"
+                className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-brand-300 dark:hover:border-brand-600 bg-white dark:bg-slate-800/80 hover:bg-brand-50/40 dark:hover:bg-slate-800 text-left transition shadow-2xs group"
               >
-                <div className="text-xs font-medium text-slate-800 group-hover:text-brand-700">
+                <div className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-brand-700 dark:group-hover:text-brand-400">
                   {item.title}
                 </div>
-                <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
                   "{item.query}"
                 </div>
               </button>
@@ -101,8 +101,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               <div
                 className={`max-w-[85%] sm:max-w-[80%] rounded-xl p-4 text-xs sm:text-sm shadow-xs ${
                   isUser
-                    ? 'bg-slate-900 text-white rounded-br-xs'
-                    : 'bg-white border border-slate-200 text-slate-800 rounded-bl-xs'
+                    ? 'bg-slate-900 dark:bg-brand-600 text-white rounded-br-xs'
+                    : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-xs'
                 }`}
               >
                 {isUser ? (
@@ -117,7 +117,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               </div>
 
               {isUser && (
-                <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center shrink-0 mt-0.5">
                   <User className="w-4 h-4" />
                 </div>
               )}
@@ -127,8 +127,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
         {/* Loading Progress State */}
         {isLoading && statusText && (
-          <div className="flex items-center space-x-3 text-xs text-slate-500 pl-1 py-1">
-            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+          <div className="flex items-center space-x-3 text-xs text-slate-500 dark:text-slate-400 pl-1 py-1">
+            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
               <Loader2 className="w-3.5 h-3.5 text-brand-500 animate-spin" />
             </div>
             <span className="italic">{statusText}</span>

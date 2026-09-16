@@ -386,7 +386,7 @@ const transcriptRetrievalTool = defineTool({
 });
 
 async function executeTurn(params) {
-  const { user_prompt, rewritten_query, history = [], provider = "ollama", model_name } = params;
+  const { user_prompt, rewritten_query, history = [], provider = "ollama", model_name, api_key } = params;
 
   currentTurnEvidence = [];
   currentTurnDecision = null;
@@ -397,11 +397,11 @@ async function executeTurn(params) {
   let model;
 
   if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = api_key || process.env.ANTHROPIC_API_KEY;
     if (!apiKey || apiKey.trim() === "") {
       throw new Error(
-        "ProviderConfigurationError: ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic. " +
-          "Zero silent fallback to Ollama is permitted.",
+        "ProviderConfigurationError: Anthropic API key is required when provider=anthropic. " +
+          "Zero silent fallback to Ollama is permitted. Please configure an API key in the UI.",
       );
     }
     runtime.setRuntimeApiKey("anthropic", apiKey);

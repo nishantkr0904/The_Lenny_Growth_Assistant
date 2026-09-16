@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+.secrets/
+**/.secrets/
+
 
 # External Transcript Knowledge Base
 data/transcripts/

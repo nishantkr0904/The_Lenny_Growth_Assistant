@@ -312,3 +312,16 @@ class SessionStore:
         sql = text("UPDATE sessions SET title = :title, updated_at = NOW() WHERE id = :id;")
         await db.execute(sql, {"id": session_id, "title": title})
         await db.commit()
+
+    @staticmethod
+    async def delete_session(db: AsyncSession, session_id: str) -> bool:
+        """Permanently delete a session. Cascades to messages, sources, and artifacts via DB foreign keys."""
+        check_sql = text("SELECT id FROM sessions WHERE id = :id;")
+        result = await db.execute(check_sql, {"id": session_id})
+        if not result.fetchone():
+            return False
+
+        del_sql = text("DELETE FROM sessions WHERE id = :id;")
+        await db.execute(del_sql, {"id": session_id})
+        await db.commit()
+        return True

@@ -19,7 +19,9 @@ from app.agent.citation import CitationValidator
 from app.agent.intent import classify_conversational_intent
 from app.agent.pi_bridge import PiBridgeClient, PiTurnResult
 from app.core.config import get_settings
+from app.providers.base import ProviderConfigurationError
 from app.providers.factory import get_generation_provider
+from app.providers.manager import ProviderManager
 from app.retrieval.engine import VectorRetrievalEngine
 from app.retrieval.grounding import GroundingGate
 from app.retrieval.models import EvidenceItem, GroundingTier
@@ -97,12 +99,48 @@ class QnAOrchestrator:
             content=user_content,
         )
 
-        # 3. Check conversational intent before retrieval / rewriting
+        # 3. Check provider configuration and handle missing cloud API key
+        manager = ProviderManager.get_instance()
+        active_provider = manager.get_active_provider()
+        active_key = manager.get_anthropic_api_key() if active_provider == "anthropic" else None
+
+        if active_provider == "anthropic" and not active_key:
+            err_msg = (
+                "Anthropic API key is required when Anthropic provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="anthropic/unconfigured",
+            )
+            return QnAResult(
+                session_id=session_id,
+                message_id=asst_msg.id,
+                role="assistant",
+                content=err_msg,
+                grounding={
+                    "tier": "Insufficient",
+                    "can_synthesize": False,
+                    "top_score": 0.0,
+                    "agent": "provider-gate",
+                },
+                sources=[],
+                latency_ms=elapsed_ms,
+                model_used="anthropic/unconfigured",
+            )
+
+        # 4. Check conversational intent before retrieval / rewriting
         intent_decision = classify_conversational_intent(user_content)
         if intent_decision.is_conversational:
             logger.info("Routing user message as conversational intent (%s)", intent_decision.sub_intent)
             try:
-                provider = get_generation_provider()
+                provider = get_generation_provider(active_provider)
                 conv_content = await provider.generate(
                     messages=[{"role": "user", "content": user_content}],
                     system_prompt=CONVERSATIONAL_SYSTEM_PROMPT,
@@ -126,7 +164,7 @@ class QnAOrchestrator:
                 content=conv_content,
                 evidence_tier="Conversational",
                 latency_ms=elapsed_ms,
-                model_used=f"{settings.LLM_PROVIDER}/conversational",
+                model_used=f"{active_provider}/conversational",
             )
 
             return QnAResult(
@@ -142,30 +180,31 @@ class QnAOrchestrator:
                 },
                 sources=[],
                 latency_ms=elapsed_ms,
-                model_used=f"{settings.LLM_PROVIDER}/conversational",
+                model_used=f"{active_provider}/conversational",
             )
 
-        # 4. Fetch bounded working context (last 6 messages)
+        # 5. Fetch bounded working context (last 6 messages)
         history = await SessionStore.get_recent_messages(db, session_id, limit=6)
         prior_turns = history[:-1]  # Exclude current user prompt
 
-        # 5. Conversation-aware query rewriting
+        # 6. Conversation-aware query rewriting
         retrieval_query = await self.rewriter.rewrite(user_content, prior_turns)
 
-        # 5. Format prior context for Pi agent session
+        # 7. Format prior context for Pi agent session
         formatted_history = [
             {"role": msg.role, "content": msg.content}
             for msg in prior_turns[-4:]
         ]
 
-        # 6. Execute turn through Pi Coding Agent
-        logger.info("Dispatching turn to Pi Coding Agent for session %s...", session_id)
+        # 8. Execute turn through Pi Coding Agent
+        logger.info("Dispatching turn to Pi Coding Agent for session %s (provider=%s)...", session_id, active_provider)
         pi_result = await self.pi_bridge.execute_turn(
             user_prompt=user_content,
             rewritten_query=retrieval_query,
             history=formatted_history,
-            provider=settings.LLM_PROVIDER,
-            model_name=settings.ANTHROPIC_MODEL if settings.LLM_PROVIDER == "anthropic" else settings.OLLAMA_MODEL,
+            provider=active_provider,
+            model_name=settings.ANTHROPIC_MODEL if active_provider == "anthropic" else settings.OLLAMA_MODEL,
+            api_key=active_key,
         )
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
@@ -265,7 +304,40 @@ class QnAOrchestrator:
             content=user_content,
         )
 
-        # 3. Check conversational intent before retrieval / rewriting
+        # 3. Check provider configuration and handle missing cloud API key
+        manager = ProviderManager.get_instance()
+        active_provider = manager.get_active_provider()
+        active_key = manager.get_anthropic_api_key() if active_provider == "anthropic" else None
+
+        if active_provider == "anthropic" and not active_key:
+            err_msg = (
+                "Anthropic API key is required when Anthropic provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            yield f"event: delta\ndata: {json.dumps({'text': err_msg})}\n\n"
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="anthropic/unconfigured",
+            )
+            done_payload = {
+                "message_id": asst_msg.id,
+                "session_id": session_id,
+                "latency_ms": elapsed_ms,
+                "tier": "Insufficient",
+                "can_synthesize": False,
+                "sources": [],
+                "agent": "provider-gate",
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+            return
+
+        # 4. Check conversational intent before retrieval / rewriting
         intent_decision = classify_conversational_intent(user_content)
         if intent_decision.is_conversational:
             logger.info("Routing stream turn as conversational intent (%s)", intent_decision.sub_intent)
@@ -278,7 +350,7 @@ class QnAOrchestrator:
 
             accumulated_text = ""
             try:
-                provider = get_generation_provider()
+                provider = get_generation_provider(active_provider)
                 async for token in provider.stream(
                     messages=[{"role": "user", "content": user_content}],
                     system_prompt=CONVERSATIONAL_SYSTEM_PROMPT,
@@ -305,7 +377,7 @@ class QnAOrchestrator:
                 content=accumulated_text.strip(),
                 evidence_tier="Conversational",
                 latency_ms=elapsed_ms,
-                model_used=f"{settings.LLM_PROVIDER}/conversational",
+                model_used=f"{active_provider}/conversational",
             )
 
             done_payload = {
@@ -320,7 +392,7 @@ class QnAOrchestrator:
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
             return
 
-        # 4. Context & rewriting
+        # 5. Context & rewriting
         history = await SessionStore.get_recent_messages(db, session_id, limit=6)
         prior_turns = history[:-1]
 
@@ -340,7 +412,7 @@ class QnAOrchestrator:
             for msg in prior_turns[-4:]
         ]
 
-        # 4. Stream turn via Pi bridge
+        # 6. Stream turn via Pi bridge
         accumulated_text = ""
         final_pi_result: Optional[PiTurnResult] = None
 
@@ -348,8 +420,9 @@ class QnAOrchestrator:
             user_prompt=user_content,
             rewritten_query=retrieval_query,
             history=formatted_history,
-            provider=settings.LLM_PROVIDER,
-            model_name=settings.ANTHROPIC_MODEL if settings.LLM_PROVIDER == "anthropic" else settings.OLLAMA_MODEL,
+            provider=active_provider,
+            model_name=settings.ANTHROPIC_MODEL if active_provider == "anthropic" else settings.OLLAMA_MODEL,
+            api_key=active_key,
         ):
             event_type = item["event"]
             data = item["data"]
@@ -380,7 +453,7 @@ class QnAOrchestrator:
                 tier="Insufficient",
                 top_score=0.0,
                 can_synthesize=False,
-                model_used=f"{settings.LLM_PROVIDER}/pi",
+                model_used=f"{active_provider}/pi",
                 selected_evidence=[],
             )
 

@@ -9,24 +9,24 @@ interface SourceCardProps {
 
 export const SourceCard: React.FC<SourceCardProps> = ({ source, index }) => {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs space-y-2">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3.5 shadow-xs space-y-2 transition-colors">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center space-x-1.5">
-            <span className="text-xs font-bold text-slate-900">[{index}] {source.guest || 'Podcast Guest'}</span>
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">[{index}] {source.guest || 'Podcast Guest'}</span>
             {source.similarity_score && (
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+              <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono">
                 {Math.round(source.similarity_score * 100)}% match
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-500 line-clamp-1 italic mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 italic mt-0.5">
             {source.title || "Lenny's Podcast"}
           </p>
         </div>
       </div>
 
-      <div className="bg-slate-50 rounded p-2.5 border-l-2 border-brand-500 text-xs text-slate-700 leading-relaxed italic">
+      <div className="bg-slate-50 dark:bg-slate-900/60 rounded p-2.5 border-l-2 border-brand-500 text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
         <Quote className="w-3 h-3 text-brand-400 mb-1 inline mr-1" />
         "{source.quoted_excerpt || 'Verbatim transcript dialogue retrieved from PostgreSQL pgvector.'}"
       </div>

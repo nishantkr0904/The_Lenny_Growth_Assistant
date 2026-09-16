@@ -1,4 +1,11 @@
-import { Artifact, ArtifactListItem, HealthStatus, Session, SessionDetail } from '../types';
+import {
+  Artifact,
+  ArtifactListItem,
+  HealthStatus,
+  ProviderStatusResponse,
+  Session,
+  SessionDetail,
+} from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -6,6 +13,40 @@ export async function fetchHealth(): Promise<HealthStatus> {
   const res = await fetch(`${API_BASE}/health`);
   if (!res.ok) {
     throw new Error(`Health check failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchProviders(): Promise<ProviderStatusResponse> {
+  const res = await fetch(`${API_BASE}/providers`);
+  if (!res.ok) {
+    throw new Error(`Failed to load providers: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function selectProvider(provider: 'ollama' | 'anthropic'): Promise<ProviderStatusResponse> {
+  const res = await fetch(`${API_BASE}/providers/select`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Failed to select provider');
+  }
+  return res.json();
+}
+
+export async function saveAnthropicKey(apiKey: string): Promise<ProviderStatusResponse> {
+  const res = await fetch(`${API_BASE}/providers/anthropic/key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Failed to save Anthropic API key');
   }
   return res.json();
 }

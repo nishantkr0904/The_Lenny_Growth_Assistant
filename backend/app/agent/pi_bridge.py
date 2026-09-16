@@ -151,6 +151,7 @@ class PiBridgeClient:
         history: Optional[list[dict[str, Any]]] = None,
         provider: Optional[str] = None,
         model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> PiTurnResult:
         """Execute a complete conversational turn through Pi Coding Agent."""
         async with self._lock:
@@ -168,6 +169,8 @@ class PiBridgeClient:
                 "provider": provider or settings.LLM_PROVIDER,
                 "model_name": model_name or (settings.ANTHROPIC_MODEL if provider == "anthropic" else settings.OLLAMA_MODEL),
             }
+            if api_key:
+                params["api_key"] = api_key
 
             req = {
                 "jsonrpc": "2.0",
@@ -212,6 +215,7 @@ class PiBridgeClient:
         history: Optional[list[dict[str, Any]]] = None,
         provider: Optional[str] = None,
         model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream a conversational turn emitting events from Pi Coding Agent."""
         async with self._lock:
@@ -229,6 +233,8 @@ class PiBridgeClient:
                 "provider": provider or settings.LLM_PROVIDER,
                 "model_name": model_name or (settings.ANTHROPIC_MODEL if provider == "anthropic" else settings.OLLAMA_MODEL),
             }
+            if api_key:
+                params["api_key"] = api_key
 
             req = {
                 "jsonrpc": "2.0",

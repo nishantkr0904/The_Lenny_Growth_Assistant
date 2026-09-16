@@ -11,6 +11,7 @@ from app.api.v1.ingest import router as ingest_router
 from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.artifacts import router as artifacts_router
+from app.api.v1.providers import router as providers_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.init_db import init_db
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(retrieval_router, prefix="/api/v1")
     app.include_router(sessions_router, prefix="/api/v1")
     app.include_router(artifacts_router, prefix="/api/v1")
+    app.include_router(providers_router, prefix="/api/v1")
 
     @app.get("/", summary="Root index")
     async def root_index() -> dict[str, str]:
