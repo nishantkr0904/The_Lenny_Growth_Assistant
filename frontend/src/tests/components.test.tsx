@@ -49,7 +49,31 @@ describe('Header Component', () => {
     expect(screen.getByText('Gemini (gemini-2.5-flash)')).toBeInTheDocument();
   });
 
-  it('toggles provider menu and shows options including Gemini when badge is clicked', () => {
+  it('renders provider badge for OpenAI when configured', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'openai' as any,
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    expect(screen.getByText('OpenAI (gpt-4o)')).toBeInTheDocument();
+  });
+
+  it('renders provider badge for Groq when configured', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'groq' as any,
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    expect(screen.getByText('Groq (llama-3.3-70b)')).toBeInTheDocument();
+  });
+
+  it('toggles provider menu and shows options including all 5 providers when badge is clicked', () => {
     const health: HealthStatus = {
       status: 'ok',
       database: 'connected',
@@ -65,6 +89,8 @@ describe('Header Component', () => {
     expect(screen.getByText(/Ollama · Local/i)).toBeInTheDocument();
     expect(screen.getByText(/Google Gemini · Cloud/i)).toBeInTheDocument();
     expect(screen.getByText(/Anthropic · Cloud/i)).toBeInTheDocument();
+    expect(screen.getByText(/OpenAI · Cloud/i)).toBeInTheDocument();
+    expect(screen.getByText(/Groq · Cloud/i)).toBeInTheDocument();
   });
 
   it('clicking unconfigured Gemini opens API key form while Ollama remains active', () => {
@@ -92,6 +118,60 @@ describe('Header Component', () => {
     const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
     fireEvent.click(cancelBtn);
     expect(screen.queryByText(/Enter Google Gemini API Key:/i)).toBeNull();
+  });
+
+  it('clicking unconfigured OpenAI opens API key form while Ollama remains active', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'ollama',
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    const badgeButton = screen.getByRole('button', { name: /Select LLM generation provider/i });
+    fireEvent.click(badgeButton);
+
+    // Click OpenAI card
+    const openaiCard = screen.getByText(/OpenAI · Cloud/i);
+    fireEvent.click(openaiCard);
+
+    // Form appears asking for OpenAI key
+    expect(screen.getByText(/Enter OpenAI API Key:/i)).toBeInTheDocument();
+    // Ollama remains active in header badge
+    expect(screen.getByText('Ollama (llama3.1:8b)')).toBeInTheDocument();
+
+    // Cancel button resets form
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByText(/Enter OpenAI API Key:/i)).toBeNull();
+  });
+
+  it('clicking unconfigured Groq opens API key form while Ollama remains active', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'ollama',
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    const badgeButton = screen.getByRole('button', { name: /Select LLM generation provider/i });
+    fireEvent.click(badgeButton);
+
+    // Click Groq card
+    const groqCard = screen.getByText(/Groq · Cloud/i);
+    fireEvent.click(groqCard);
+
+    // Form appears asking for Groq key
+    expect(screen.getByText(/Enter Groq API Key:/i)).toBeInTheDocument();
+    // Ollama remains active in header badge
+    expect(screen.getByText('Ollama (llama3.1:8b)')).toBeInTheDocument();
+
+    // Cancel button resets form
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByText(/Enter Groq API Key:/i)).toBeNull();
   });
 
   it('toggles dark mode theme and adds dark class to documentElement', () => {
@@ -257,6 +337,40 @@ describe('Grounding Trust UX Components', () => {
 
     // Must NOT render Evidence badges or Create Artifact CTA
     expect(screen.queryByText(/Evidence/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Create Artifact/i })).toBeNull();
+    expect(screen.queryByText(/Sources:/i)).toBeNull();
+  });
+
+  it('AnswerBlock renders Generation Error card when generation fails and omits action bar', () => {
+    const errorMsg: Message = {
+      id: 'msg-err',
+      session_id: 'sess-1',
+      role: 'assistant',
+      content: 'Generation failed with Groq. Please try again or switch providers.',
+      evidence_tier: 'Strong' as any,
+      sources: [
+        {
+          chunk_id: 'c-1',
+          title: 'The art of product management',
+          guest: 'Shreyas Doshi',
+          similarity_score: 0.819,
+          quoted_excerpt: 'L tasks are leverage tasks...',
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    render(
+      <AnswerBlock
+        message={errorMsg}
+        onCreateArtifact={vi.fn()}
+        onOpenSources={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Generation Error')).toBeInTheDocument();
+    expect(screen.getByText(/Generation failed with Groq. Please try again or switch providers./i)).toBeInTheDocument();
+    // Action buttons and citation badges must NOT be rendered
     expect(screen.queryByRole('button', { name: /Create Artifact/i })).toBeNull();
     expect(screen.queryByText(/Sources:/i)).toBeNull();
   });

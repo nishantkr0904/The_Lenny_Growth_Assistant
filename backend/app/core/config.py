@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     HOST_PORT_FRONTEND: int = 3000
     HOST_PORT_OLLAMA: int = 11434
 
-    # Active LLM Provider (Options: 'ollama', 'anthropic', 'gemini', 'openai')
-    LLM_PROVIDER: Literal["ollama", "anthropic", "gemini", "openai"] = "ollama"
+    # Active LLM Provider (Options: 'ollama', 'anthropic', 'gemini', 'openai', 'groq')
+    LLM_PROVIDER: Literal["ollama", "anthropic", "gemini", "openai", "groq"] = "ollama"
 
     # Ollama Configuration (Local Demo Default — Generation)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
@@ -45,6 +45,9 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o"
+
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # Retrieval & Grounding Thresholds (Canonical: Strong, Limited, Conflicting, Insufficient)
     RETRIEVAL_TOP_K: int = 15

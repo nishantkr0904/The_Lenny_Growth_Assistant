@@ -105,6 +105,8 @@ class QnAOrchestrator:
         active_key = (
             manager.get_anthropic_api_key() if active_provider == "anthropic"
             else manager.get_gemini_api_key() if active_provider == "gemini"
+            else manager.get_openai_api_key() if active_provider == "openai"
+            else manager.get_groq_api_key() if active_provider == "groq"
             else None
         )
 
@@ -167,6 +169,66 @@ class QnAOrchestrator:
                 sources=[],
                 latency_ms=elapsed_ms,
                 model_used="gemini/unconfigured",
+            )
+        elif active_provider == "openai" and not active_key:
+            err_msg = (
+                "OpenAI API key is required when OpenAI provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="openai/unconfigured",
+            )
+            return QnAResult(
+                session_id=session_id,
+                message_id=asst_msg.id,
+                role="assistant",
+                content=err_msg,
+                grounding={
+                    "tier": "Insufficient",
+                    "can_synthesize": False,
+                    "top_score": 0.0,
+                    "agent": "provider-gate",
+                },
+                sources=[],
+                latency_ms=elapsed_ms,
+                model_used="openai/unconfigured",
+            )
+        elif active_provider == "groq" and not active_key:
+            err_msg = (
+                "Groq API key is required when Groq provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="groq/unconfigured",
+            )
+            return QnAResult(
+                session_id=session_id,
+                message_id=asst_msg.id,
+                role="assistant",
+                content=err_msg,
+                grounding={
+                    "tier": "Insufficient",
+                    "can_synthesize": False,
+                    "top_score": 0.0,
+                    "agent": "provider-gate",
+                },
+                sources=[],
+                latency_ms=elapsed_ms,
+                model_used="groq/unconfigured",
             )
 
         # 4. Check conversational intent before retrieval / rewriting
@@ -235,6 +297,8 @@ class QnAOrchestrator:
         target_model = (
             settings.ANTHROPIC_MODEL if active_provider == "anthropic"
             else settings.GEMINI_MODEL if active_provider == "gemini"
+            else settings.OPENAI_MODEL if active_provider == "openai"
+            else settings.GROQ_MODEL if active_provider == "groq"
             else settings.OLLAMA_MODEL
         )
         pi_result = await self.pi_bridge.execute_turn(
@@ -273,6 +337,16 @@ class QnAOrchestrator:
 
         tier_enum = GroundingTier.from_str(pi_result.tier)
 
+        generation_failed = pi_result.generation_failed or not pi_result.content.strip()
+        if generation_failed:
+            err_msg = (
+                pi_result.content.strip()
+                if pi_result.content.strip().startswith("Generation failed with")
+                else f"Generation failed with {active_provider.title()}. Please try again or switch providers."
+            )
+            pi_result.content = err_msg
+            pi_result.can_synthesize = False
+
         # 8. Post-generation citation validation
         cit_result = CitationValidator.validate_and_extract(
             response_text=pi_result.content,
@@ -281,11 +355,13 @@ class QnAOrchestrator:
             tier=tier_enum,
         )
 
-        # Refusal turns or insufficient evidence must strictly be Insufficient tier with zero sources
-        is_refusal = len(cit_result.validated_sources) == 0 and (
-            tier_enum == GroundingTier.INSUFFICIENT
-            or not pi_result.can_synthesize
-            or any(w in pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+        # Refusal turns, generation failures, or insufficient evidence must strictly be Insufficient tier with zero sources
+        is_refusal = generation_failed or (
+            len(cit_result.validated_sources) == 0 and (
+                tier_enum == GroundingTier.INSUFFICIENT
+                or not pi_result.can_synthesize
+                or any(w in pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+            )
         )
         effective_tier = "Insufficient" if is_refusal else pi_result.tier
         effective_can_synthesize = False if is_refusal else pi_result.can_synthesize
@@ -349,6 +425,8 @@ class QnAOrchestrator:
         active_key = (
             manager.get_anthropic_api_key() if active_provider == "anthropic"
             else manager.get_gemini_api_key() if active_provider == "gemini"
+            else manager.get_openai_api_key() if active_provider == "openai"
+            else manager.get_groq_api_key() if active_provider == "groq"
             else None
         )
 
@@ -394,6 +472,60 @@ class QnAOrchestrator:
                 evidence_tier="Insufficient",
                 latency_ms=elapsed_ms,
                 model_used="gemini/unconfigured",
+            )
+            done_payload = {
+                "message_id": asst_msg.id,
+                "session_id": session_id,
+                "latency_ms": elapsed_ms,
+                "tier": "Insufficient",
+                "can_synthesize": False,
+                "sources": [],
+                "agent": "provider-gate",
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+            return
+        elif active_provider == "openai" and not active_key:
+            err_msg = (
+                "OpenAI API key is required when OpenAI provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            yield f"event: delta\ndata: {json.dumps({'text': err_msg})}\n\n"
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="openai/unconfigured",
+            )
+            done_payload = {
+                "message_id": asst_msg.id,
+                "session_id": session_id,
+                "latency_ms": elapsed_ms,
+                "tier": "Insufficient",
+                "can_synthesize": False,
+                "sources": [],
+                "agent": "provider-gate",
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+            return
+        elif active_provider == "groq" and not active_key:
+            err_msg = (
+                "Groq API key is required when Groq provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            yield f"event: delta\ndata: {json.dumps({'text': err_msg})}\n\n"
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="groq/unconfigured",
             )
             done_payload = {
                 "message_id": asst_msg.id,
@@ -494,6 +626,8 @@ class QnAOrchestrator:
             model_name=(
                 settings.ANTHROPIC_MODEL if active_provider == "anthropic"
                 else settings.GEMINI_MODEL if active_provider == "gemini"
+                else settings.OPENAI_MODEL if active_provider == "openai"
+                else settings.GROQ_MODEL if active_provider == "groq"
                 else settings.OLLAMA_MODEL
             ),
             api_key=active_key,
@@ -558,6 +692,18 @@ class QnAOrchestrator:
 
         tier_enum = GroundingTier.from_str(final_pi_result.tier)
 
+        generation_failed = final_pi_result.generation_failed or not final_pi_result.content.strip()
+        if generation_failed:
+            err_msg = (
+                final_pi_result.content.strip()
+                if final_pi_result.content.strip().startswith("Generation failed with")
+                else f"Generation failed with {active_provider.title()}. Please try again or switch providers."
+            )
+            final_pi_result.content = err_msg
+            final_pi_result.can_synthesize = False
+            if not accumulated_text.strip():
+                yield f"event: delta\ndata: {json.dumps({'text': err_msg})}\n\n"
+
         # 6. Validate citations
         cit_result = CitationValidator.validate_and_extract(
             response_text=final_pi_result.content,
@@ -566,16 +712,18 @@ class QnAOrchestrator:
             tier=tier_enum,
         )
 
-        # Refusal turns or insufficient evidence must strictly be Insufficient tier with zero sources
-        is_refusal = len(cit_result.validated_sources) == 0 and (
-            tier_enum == GroundingTier.INSUFFICIENT
-            or not final_pi_result.can_synthesize
-            or any(w in final_pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+        # Refusal turns, generation failures, or insufficient evidence must strictly be Insufficient tier with zero sources
+        is_refusal = generation_failed or (
+            len(cit_result.validated_sources) == 0 and (
+                tier_enum == GroundingTier.INSUFFICIENT
+                or not final_pi_result.can_synthesize
+                or any(w in final_pi_result.content.lower() for w in ["no information", "not discussed", "not covered", "could not find"])
+            )
         )
         effective_tier = "Insufficient" if is_refusal else final_pi_result.tier
         effective_can_synthesize = False if is_refusal else final_pi_result.can_synthesize
 
-        if not is_refusal:
+        if not is_refusal and not generation_failed:
             for src in cit_result.validated_sources:
                 yield f"event: citation\ndata: {json.dumps(src.model_dump())}\n\n"
 
@@ -590,7 +738,7 @@ class QnAOrchestrator:
             model_used=final_pi_result.model_used,
         )
 
-        if cit_result.validated_sources and not is_refusal:
+        if cit_result.validated_sources and not is_refusal and not generation_failed:
             await SessionStore.save_source_references(db, asst_msg.id, cit_result.validated_sources)
 
         done_payload = {
@@ -599,8 +747,9 @@ class QnAOrchestrator:
             "latency_ms": elapsed_ms,
             "tier": effective_tier,
             "can_synthesize": effective_can_synthesize,
-            "sources": [] if is_refusal else [s.model_dump() for s in cit_result.validated_sources],
+            "sources": [] if (is_refusal or generation_failed) else [s.model_dump() for s in cit_result.validated_sources],
             "agent": "pi-coding-agent",
+            "generation_status": "failed" if generation_failed else "success",
         }
         yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 

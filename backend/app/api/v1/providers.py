@@ -13,7 +13,7 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 
 
 class ProviderSelectRequest(BaseModel):
-    provider: Literal["ollama", "anthropic", "gemini"]
+    provider: Literal["ollama", "anthropic", "gemini", "openai", "groq"]
 
 
 class AnthropicKeyRequest(BaseModel):
@@ -22,6 +22,14 @@ class AnthropicKeyRequest(BaseModel):
 
 class GeminiKeyRequest(BaseModel):
     api_key: str = Field(..., min_length=1, description="Google Gemini API key")
+
+
+class OpenAIKeyRequest(BaseModel):
+    api_key: str = Field(..., min_length=1, description="OpenAI API key")
+
+
+class GroqKeyRequest(BaseModel):
+    api_key: str = Field(..., min_length=1, description="Groq API key")
 
 
 class ProviderStatusItem(BaseModel):
@@ -111,4 +119,60 @@ async def configure_anthropic_key(payload: AnthropicKeyRequest) -> ProviderStatu
 
     manager.set_anthropic_api_key(key_clean)
     manager.set_active_provider("anthropic")
+    return ProviderStatusResponse(**manager.get_provider_status())
+
+
+@router.post("/openai/key", response_model=ProviderStatusResponse, summary="Configure OpenAI cloud API key")
+async def configure_openai_key(payload: OpenAIKeyRequest) -> ProviderStatusResponse:
+    """
+    Validate, save, and activate OpenAI cloud API key in the runtime credential store.
+    Validates the key against OpenAI's API before updating active provider.
+    Never logs or echoes back the secret key in plaintext.
+    """
+    key_clean = payload.api_key.strip()
+    if not key_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OpenAI API key cannot be empty or whitespace.",
+        )
+
+    manager = ProviderManager.get_instance()
+    is_valid, err_msg = await manager.validate_openai_key(key_clean)
+    if not is_valid:
+        logger.warning("OpenAI API key validation failed: %s", err_msg)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"OpenAI API key validation failed: {err_msg}",
+        )
+
+    manager.set_openai_api_key(key_clean)
+    manager.set_active_provider("openai")
+    return ProviderStatusResponse(**manager.get_provider_status())
+
+
+@router.post("/groq/key", response_model=ProviderStatusResponse, summary="Configure Groq cloud API key")
+async def configure_groq_key(payload: GroqKeyRequest) -> ProviderStatusResponse:
+    """
+    Validate, save, and activate Groq cloud API key in the runtime credential store.
+    Validates the key against Groq's API before updating active provider.
+    Never logs or echoes back the secret key in plaintext.
+    """
+    key_clean = payload.api_key.strip()
+    if not key_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Groq API key cannot be empty or whitespace.",
+        )
+
+    manager = ProviderManager.get_instance()
+    is_valid, err_msg = await manager.validate_groq_key(key_clean)
+    if not is_valid:
+        logger.warning("Groq API key validation failed: %s", err_msg)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Groq API key validation failed: {err_msg}",
+        )
+
+    manager.set_groq_api_key(key_clean)
+    manager.set_active_provider("groq")
     return ProviderStatusResponse(**manager.get_provider_status())

@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HealthStatus, ProviderStatusResponse } from '../../types';
 import { Cpu, Plus, Sparkles, Moon, Sun, Key, Check, AlertCircle, X, ChevronDown, Loader2 } from 'lucide-react';
-import { fetchProviders, selectProvider, saveAnthropicKey, saveGeminiKey } from '../../services/api';
+import {
+  fetchProviders,
+  selectProvider,
+  saveAnthropicKey,
+  saveGeminiKey,
+  saveOpenAIKey,
+  saveGroqKey,
+} from '../../services/api';
 
 interface HeaderProps {
   health: HealthStatus | null;
   onNewSession: () => void;
-  activeProvider?: 'ollama' | 'anthropic' | 'gemini';
-  onProviderChange?: (provider: 'ollama' | 'anthropic' | 'gemini') => void;
+  activeProvider?: 'ollama' | 'anthropic' | 'gemini' | 'openai' | 'groq';
+  onProviderChange?: (provider: 'ollama' | 'anthropic' | 'gemini' | 'openai' | 'groq') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
   // Provider configuration management
   const [isProviderMenuOpen, setIsProviderMenuOpen] = useState(false);
   const [providerData, setProviderData] = useState<ProviderStatusResponse | null>(null);
-  const [editingProvider, setEditingProvider] = useState<'gemini' | 'anthropic' | null>(null);
+  const [editingProvider, setEditingProvider] = useState<'gemini' | 'anthropic' | 'openai' | 'groq' | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -85,10 +92,18 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isProviderMenuOpen]);
 
-  const activeProvider: 'ollama' | 'anthropic' | 'gemini' =
+  const activeProvider: 'ollama' | 'anthropic' | 'gemini' | 'openai' | 'groq' =
     providerData?.active_provider ||
     propActiveProvider ||
-    (health?.provider === 'anthropic' ? 'anthropic' : health?.provider === 'gemini' ? 'gemini' : 'ollama');
+    (health?.provider === 'anthropic'
+      ? 'anthropic'
+      : health?.provider === 'gemini'
+      ? 'gemini'
+      : health?.provider === 'openai'
+      ? 'openai'
+      : health?.provider === 'groq'
+      ? 'groq'
+      : 'ollama');
 
   const geminiInfo = providerData?.providers.find((p) => p.id === 'gemini');
   const isGeminiConfigured = geminiInfo ? geminiInfo.configured : false;
@@ -96,7 +111,13 @@ export const Header: React.FC<HeaderProps> = ({
   const anthropicInfo = providerData?.providers.find((p) => p.id === 'anthropic');
   const isAnthropicConfigured = anthropicInfo ? anthropicInfo.configured : false;
 
-  const handleSelectProvider = async (p: 'ollama' | 'anthropic' | 'gemini') => {
+  const openaiInfo = providerData?.providers.find((p) => p.id === 'openai');
+  const isOpenAIConfigured = openaiInfo ? openaiInfo.configured : false;
+
+  const groqInfo = providerData?.providers.find((p) => p.id === 'groq');
+  const isGroqConfigured = groqInfo ? groqInfo.configured : false;
+
+  const handleSelectProvider = async (p: 'ollama' | 'anthropic' | 'gemini' | 'openai' | 'groq') => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -109,6 +130,18 @@ export const Header: React.FC<HeaderProps> = ({
 
     if (p === 'anthropic' && !isAnthropicConfigured) {
       setEditingProvider('anthropic');
+      setApiKeyInput('');
+      return;
+    }
+
+    if (p === 'openai' && !isOpenAIConfigured) {
+      setEditingProvider('openai');
+      setApiKeyInput('');
+      return;
+    }
+
+    if (p === 'groq' && !isGroqConfigured) {
+      setEditingProvider('groq');
       setApiKeyInput('');
       return;
     }
@@ -135,14 +168,27 @@ export const Header: React.FC<HeaderProps> = ({
       let updated: ProviderStatusResponse;
       if (editingProvider === 'gemini') {
         updated = await saveGeminiKey(apiKeyInput.trim());
-      } else {
+      } else if (editingProvider === 'anthropic') {
         updated = await saveAnthropicKey(apiKeyInput.trim());
+      } else if (editingProvider === 'openai') {
+        updated = await saveOpenAIKey(apiKeyInput.trim());
+      } else if (editingProvider === 'groq') {
+        updated = await saveGroqKey(apiKeyInput.trim());
+      } else {
+        return;
       }
 
       setProviderData(updated);
       onProviderChange?.(editingProvider);
       setApiKeyInput('');
-      const providerLabel = editingProvider === 'gemini' ? 'Google Gemini' : 'Anthropic';
+      const providerLabel =
+        editingProvider === 'gemini'
+          ? 'Google Gemini'
+          : editingProvider === 'anthropic'
+          ? 'Anthropic'
+          : editingProvider === 'openai'
+          ? 'OpenAI'
+          : 'Groq';
       setSuccessMessage(`${providerLabel} API key validated and activated.`);
       setEditingProvider(null);
     } catch (err: any) {
@@ -211,6 +257,38 @@ export const Header: React.FC<HeaderProps> = ({
       );
     }
 
+    if (activeProvider === 'openai') {
+      return (
+        <button
+          type="button"
+          onClick={() => setIsProviderMenuOpen(!isProviderMenuOpen)}
+          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition cursor-pointer"
+          title="Click to configure generation provider"
+          aria-label="Select LLM generation provider"
+        >
+          <span className="w-1.5 h-1.5 mr-1.5 bg-teal-500 rounded-full"></span>
+          <span>OpenAI (gpt-4o)</span>
+          <ChevronDown className="w-3 h-3 ml-1 text-teal-600 dark:text-teal-400 opacity-60" />
+        </button>
+      );
+    }
+
+    if (activeProvider === 'groq') {
+      return (
+        <button
+          type="button"
+          onClick={() => setIsProviderMenuOpen(!isProviderMenuOpen)}
+          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/60 transition cursor-pointer"
+          title="Click to configure generation provider"
+          aria-label="Select LLM generation provider"
+        >
+          <span className="w-1.5 h-1.5 mr-1.5 bg-orange-500 rounded-full"></span>
+          <span>Groq (llama-3.3-70b)</span>
+          <ChevronDown className="w-3 h-3 ml-1 text-orange-600 dark:text-orange-400 opacity-60" />
+        </button>
+      );
+    }
+
     return (
       <button
         type="button"
@@ -255,7 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Provider Dropdown Popover */}
           {isProviderMenuOpen && (
-            <div className="absolute right-0 mt-2 w-80 md:w-96 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xl z-50 text-xs">
+            <div className="absolute right-0 mt-2 w-80 md:w-96 max-h-[calc(100vh-4.5rem)] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xl z-50 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
                 <div>
                   <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
@@ -520,6 +598,222 @@ export const Header: React.FC<HeaderProps> = ({
                             type="submit"
                             disabled={!apiKeyInput.trim() || isValidatingKey}
                             className="inline-flex items-center px-2.5 py-1 text-[11px] font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded shadow-xs"
+                          >
+                            {isValidatingKey ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                <span>Validating...</span>
+                              </>
+                            ) : (
+                              <span>Save & Activate</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+
+                {/* Option 4: OpenAI Cloud */}
+                <div
+                  className={`rounded-lg border transition ${
+                    activeProvider === 'openai'
+                      ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/30'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProvider('openai')}
+                    className="w-full p-3 text-left flex items-start justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center space-x-1.5 font-medium text-slate-900 dark:text-slate-100">
+                        <span className="w-2 h-2 rounded-full bg-teal-500" />
+                        <span>OpenAI · Cloud</span>
+                        <span className="text-[10px] bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 px-1.5 py-0.2 rounded font-mono">
+                          gpt-4o
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        Industry-leading reasoning and instruction following powered by OpenAI.
+                      </p>
+                    </div>
+                    {activeProvider === 'openai' && (
+                      <Check className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                    )}
+                  </button>
+
+                  {/* OpenAI Key Configuration Sub-section */}
+                  <div className="px-3 pb-3 pt-1 border-t border-teal-100 dark:border-teal-900/40">
+                    {editingProvider !== 'openai' ? (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Key className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {isOpenAIConfigured ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                API Key: Configured
+                              </span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                API Key: Not Configured
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProvider('openai');
+                            setApiKeyInput('');
+                            setErrorMessage(null);
+                          }}
+                          className="text-teal-600 dark:text-teal-400 hover:underline font-medium"
+                        >
+                          {isOpenAIConfigured ? 'Update Key' : 'Configure Key'}
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveKey} className="space-y-2 pt-1">
+                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>Enter OpenAI API Key:</span>
+                          <span className="text-[10px] text-slate-400">Validated live</span>
+                        </div>
+                        <input
+                          type="password"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          placeholder="sk-..."
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          autoFocus
+                          disabled={isValidatingKey}
+                        />
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProvider(null);
+                              setApiKeyInput('');
+                              setErrorMessage(null);
+                            }}
+                            disabled={isValidatingKey}
+                            className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!apiKeyInput.trim() || isValidatingKey}
+                            className="inline-flex items-center px-2.5 py-1 text-[11px] font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded shadow-xs"
+                          >
+                            {isValidatingKey ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                <span>Validating...</span>
+                              </>
+                            ) : (
+                              <span>Save & Activate</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+
+                {/* Option 5: Groq Cloud */}
+                <div
+                  className={`rounded-lg border transition ${
+                    activeProvider === 'groq'
+                      ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProvider('groq')}
+                    className="w-full p-3 text-left flex items-start justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center space-x-1.5 font-medium text-slate-900 dark:text-slate-100">
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span>Groq · Cloud</span>
+                        <span className="text-[10px] bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300 px-1.5 py-0.2 rounded font-mono">
+                          llama-3.3-70b-versatile
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        Ultra-low latency LPU inference with state-of-the-art open models.
+                      </p>
+                    </div>
+                    {activeProvider === 'groq' && (
+                      <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                    )}
+                  </button>
+
+                  {/* Groq Key Configuration Sub-section */}
+                  <div className="px-3 pb-3 pt-1 border-t border-orange-100 dark:border-orange-900/40">
+                    {editingProvider !== 'groq' ? (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Key className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {isGroqConfigured ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                API Key: Configured
+                              </span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                API Key: Not Configured
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProvider('groq');
+                            setApiKeyInput('');
+                            setErrorMessage(null);
+                          }}
+                          className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                        >
+                          {isGroqConfigured ? 'Update Key' : 'Configure Key'}
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveKey} className="space-y-2 pt-1">
+                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>Enter Groq API Key:</span>
+                          <span className="text-[10px] text-slate-400">Validated live</span>
+                        </div>
+                        <input
+                          type="password"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          placeholder="gsk_..."
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          autoFocus
+                          disabled={isValidatingKey}
+                        />
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProvider(null);
+                              setApiKeyInput('');
+                              setErrorMessage(null);
+                            }}
+                            disabled={isValidatingKey}
+                            className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!apiKeyInput.trim() || isValidatingKey}
+                            className="inline-flex items-center px-2.5 py-1 text-[11px] font-medium text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 rounded shadow-xs"
                           >
                             {isValidatingKey ? (
                               <>

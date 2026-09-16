@@ -31,6 +31,8 @@ class PiTurnResult(BaseModel):
     model_used: str
     selected_evidence: list[dict[str, Any]] = []
     duration_ms: int = 0
+    generation_failed: bool = False
+    error_detail: Optional[str] = None
 
 
 class PiBridgeClient:
@@ -72,6 +74,14 @@ class PiBridgeClient:
             env["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
         if settings.GEMINI_MODEL:
             env["GEMINI_MODEL"] = settings.GEMINI_MODEL
+        if settings.OPENAI_API_KEY:
+            env["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+        if settings.OPENAI_MODEL:
+            env["OPENAI_MODEL"] = settings.OPENAI_MODEL
+        if settings.GROQ_API_KEY:
+            env["GROQ_API_KEY"] = settings.GROQ_API_KEY
+        if settings.GROQ_MODEL:
+            env["GROQ_MODEL"] = settings.GROQ_MODEL
 
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -172,6 +182,10 @@ class PiBridgeClient:
                     chosen_model = settings.ANTHROPIC_MODEL
                 elif chosen_provider in ("gemini", "google"):
                     chosen_model = settings.GEMINI_MODEL
+                elif chosen_provider == "openai":
+                    chosen_model = settings.OPENAI_MODEL
+                elif chosen_provider == "groq":
+                    chosen_model = settings.GROQ_MODEL
                 else:
                     chosen_model = settings.OLLAMA_MODEL
             else:
@@ -221,6 +235,8 @@ class PiBridgeClient:
                         model_used=result.get("model", "ollama/llama3.1:8b"),
                         selected_evidence=result.get("selected_evidence", []),
                         duration_ms=elapsed,
+                        generation_failed=bool(result.get("generation_failed", False)),
+                        error_detail=result.get("error_detail"),
                     )
 
     async def stream_turn(
@@ -241,12 +257,27 @@ class PiBridgeClient:
             self._request_counter += 1
             req_id = f"stream-{self._request_counter}"
 
+            chosen_provider = provider or settings.LLM_PROVIDER
+            if not model_name:
+                if chosen_provider == "anthropic":
+                    chosen_model = settings.ANTHROPIC_MODEL
+                elif chosen_provider in ("gemini", "google"):
+                    chosen_model = settings.GEMINI_MODEL
+                elif chosen_provider == "openai":
+                    chosen_model = settings.OPENAI_MODEL
+                elif chosen_provider == "groq":
+                    chosen_model = settings.GROQ_MODEL
+                else:
+                    chosen_model = settings.OLLAMA_MODEL
+            else:
+                chosen_model = model_name
+
             params = {
                 "user_prompt": user_prompt,
                 "rewritten_query": rewritten_query or user_prompt,
                 "history": history or [],
-                "provider": provider or settings.LLM_PROVIDER,
-                "model_name": model_name or (settings.ANTHROPIC_MODEL if provider == "anthropic" else settings.OLLAMA_MODEL),
+                "provider": chosen_provider,
+                "model_name": chosen_model,
             }
             if api_key:
                 params["api_key"] = api_key
@@ -296,6 +327,8 @@ class PiBridgeClient:
                         model_used=result.get("model", "ollama/llama3.1:8b"),
                         selected_evidence=result.get("selected_evidence", []),
                         duration_ms=elapsed,
+                        generation_failed=bool(result.get("generation_failed", False)),
+                        error_detail=result.get("error_detail"),
                     )
                     yield {"event": "result", "data": final_res}
                     break

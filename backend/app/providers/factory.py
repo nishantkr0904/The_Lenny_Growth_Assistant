@@ -32,11 +32,13 @@ def get_generation_provider(provider_name: Optional[str] = None) -> GenerationPr
         return GeminiGenerationProvider(api_key=manager.get_gemini_api_key(), model=settings.GEMINI_MODEL)
 
     if selected == "openai":
-        raise ProviderConfigurationError(
-            "OpenAI provider adapter is scheduled for Phase P2.1 and is not enabled for P0. "
-            "Supported generation providers are 'ollama' (default local), 'gemini' (cloud), and 'anthropic' (cloud)."
-        )
+        from app.providers.openai import OpenAIGenerationProvider
+        return OpenAIGenerationProvider(api_key=manager.get_openai_api_key(), model=settings.OPENAI_MODEL)
+
+    if selected == "groq":
+        from app.providers.groq import GroqGenerationProvider
+        return GroqGenerationProvider(api_key=manager.get_groq_api_key(), model=settings.GROQ_MODEL)
 
     raise ProviderConfigurationError(
-        f"Unsupported LLM_PROVIDER '{selected}'. Supported providers are: 'ollama', 'gemini', 'anthropic'."
+        f"Unsupported LLM_PROVIDER '{selected}'. Supported providers are: 'ollama', 'gemini', 'anthropic', 'openai', 'groq'."
     )

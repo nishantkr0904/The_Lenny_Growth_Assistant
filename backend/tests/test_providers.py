@@ -85,10 +85,17 @@ def test_provider_factory_resolution():
             with pytest.raises(ProviderConfigurationError):
                 get_generation_provider("anthropic")
 
-    # OpenAI (deferred to P2)
-    with pytest.raises(ProviderConfigurationError) as exc_p2:
-        get_generation_provider("openai")
-    assert "Phase P2.1" in str(exc_p2.value)
+    # OpenAI without key
+    with patch.object(ProviderManager.get_instance(), "get_openai_api_key", return_value=None):
+        with patch("app.providers.openai.settings.OPENAI_API_KEY", None):
+            with pytest.raises(ProviderConfigurationError):
+                get_generation_provider("openai")
+
+    # Groq without key
+    with patch.object(ProviderManager.get_instance(), "get_groq_api_key", return_value=None):
+        with patch("app.providers.groq.settings.GROQ_API_KEY", None):
+            with pytest.raises(ProviderConfigurationError):
+                get_generation_provider("groq")
 
     # Invalid provider
     with pytest.raises(ProviderConfigurationError) as exc_inv:
@@ -97,7 +104,7 @@ def test_provider_factory_resolution():
 
 
 def test_provider_manager_and_api(tmp_path):
-    """Verify ProviderManager methods and providers API endpoints."""
+    """Verify ProviderManager methods and providers API endpoints across all 5 providers."""
     from fastapi.testclient import TestClient
     from app.main import app
     from app.providers.manager import ProviderManager
@@ -107,6 +114,8 @@ def test_provider_manager_and_api(tmp_path):
     manager._active_provider = "ollama"
     manager._anthropic_api_key = None
     manager._gemini_api_key = None
+    manager._openai_api_key = None
+    manager._groq_api_key = None
 
     client = TestClient(app)
 
@@ -115,24 +124,24 @@ def test_provider_manager_and_api(tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert data["active_provider"] == "ollama"
-    assert len(data["providers"]) == 3
+    assert len(data["providers"]) == 5
     ollama_info = next(p for p in data["providers"] if p["id"] == "ollama")
     assert ollama_info["configured"] is True
     gemini_info = next(p for p in data["providers"] if p["id"] == "gemini")
     assert gemini_info["configured"] is False
     anthropic_info = next(p for p in data["providers"] if p["id"] == "anthropic")
     assert anthropic_info["configured"] is False
+    openai_info = next(p for p in data["providers"] if p["id"] == "openai")
+    assert openai_info["configured"] is False
+    groq_info = next(p for p in data["providers"] if p["id"] == "groq")
+    assert groq_info["configured"] is False
 
     # 2. POST /api/v1/providers/select unconfigured fails (active provider remains ollama)
-    unconf_gemini = client.post("/api/v1/providers/select", json={"provider": "gemini"})
-    assert unconf_gemini.status_code == 400
-    assert "Gemini API key is not configured" in unconf_gemini.json()["detail"]
-    assert manager.get_active_provider() == "ollama"
-
-    unconf_ant = client.post("/api/v1/providers/select", json={"provider": "anthropic"})
-    assert unconf_ant.status_code == 400
-    assert "Anthropic API key is not configured" in unconf_ant.json()["detail"]
-    assert manager.get_active_provider() == "ollama"
+    for unconf_id in ("gemini", "anthropic", "openai", "groq"):
+        unconf_resp = client.post("/api/v1/providers/select", json={"provider": unconf_id})
+        assert unconf_resp.status_code == 400
+        assert "is not configured" in unconf_resp.json()["detail"]
+        assert manager.get_active_provider() == "ollama"
 
     # Reject invalid provider selection
     bad_select = client.post("/api/v1/providers/select", json={"provider": "invalid-llm"})
@@ -188,18 +197,85 @@ def test_provider_manager_and_api(tmp_path):
             ant_info = next(p for p in ant_resp.json()["providers"] if p["id"] == "anthropic")
             assert ant_info["configured"] is True
 
-    # 5. Now that both are configured, switching via select works cleanly
-    sel_gemini = client.post("/api/v1/providers/select", json={"provider": "gemini"})
-    assert sel_gemini.status_code == 200
-    assert sel_gemini.json()["active_provider"] == "gemini"
-    assert manager.get_active_provider() == "gemini"
+    # 5. POST /api/v1/providers/openai/key with live validation
+    with patch("app.providers.manager.SECRETS_DIR", tmp_path), \
+         patch("app.providers.manager.OPENAI_KEY_FILE", tmp_path / "openai_key"):
 
-    sel_ollama = client.post("/api/v1/providers/select", json={"provider": "ollama"})
-    assert sel_ollama.status_code == 200
-    assert sel_ollama.json()["active_provider"] == "ollama"
-    assert manager.get_active_provider() == "ollama"
+        # 5a. Invalid key fails, active remains anthropic
+        with patch.object(manager, "validate_openai_key", new_callable=AsyncMock) as mock_val_oai:
+            mock_val_oai.return_value = (False, "Incorrect API key provided")
+            bad_oai_resp = client.post("/api/v1/providers/openai/key", json={"api_key": "bad-oai-key"})
+            assert bad_oai_resp.status_code == 400
+            assert "Incorrect API key provided" in bad_oai_resp.json()["detail"]
+            assert manager.get_active_provider() == "anthropic"
+            assert manager.get_openai_api_key() is None
+
+        # 5b. Empty key fails
+        empty_oai = client.post("/api/v1/providers/openai/key", json={"api_key": "   "})
+        assert empty_oai.status_code == 400
+
+        # 5c. Valid key succeeds and activates OpenAI
+        with patch.object(manager, "validate_openai_key", new_callable=AsyncMock) as mock_val_oai:
+            mock_val_oai.return_value = (True, "API key is valid.")
+            oai_resp = client.post("/api/v1/providers/openai/key", json={"api_key": "sk-test-valid-openai-key"})
+            assert oai_resp.status_code == 200
+            assert oai_resp.json()["active_provider"] == "openai"
+            assert manager.get_active_provider() == "openai"
+            oai_info = next(p for p in oai_resp.json()["providers"] if p["id"] == "openai")
+            assert oai_info["configured"] is True
+            assert manager.get_openai_api_key() == "sk-test-valid-openai-key"
+
+    # 6. POST /api/v1/providers/groq/key with live validation and existing key preservation
+    with patch("app.providers.manager.SECRETS_DIR", tmp_path), \
+         patch("app.providers.manager.GROQ_KEY_FILE", tmp_path / "groq_key"):
+
+        # 6a. Invalid key fails, active remains openai
+        with patch.object(manager, "validate_groq_key", new_callable=AsyncMock) as mock_val_groq:
+            mock_val_groq.return_value = (False, "Invalid API Key")
+            bad_groq_resp = client.post("/api/v1/providers/groq/key", json={"api_key": "bad-groq-key"})
+            assert bad_groq_resp.status_code == 400
+            assert "Invalid API Key" in bad_groq_resp.json()["detail"]
+            assert manager.get_active_provider() == "openai"
+            assert manager.get_groq_api_key() is None
+
+        # 6b. Valid key succeeds and activates Groq
+        with patch.object(manager, "validate_groq_key", new_callable=AsyncMock) as mock_val_groq:
+            mock_val_groq.return_value = (True, "API key is valid.")
+            groq_resp = client.post("/api/v1/providers/groq/key", json={"api_key": "gsk_test_valid_groq_key"})
+            assert groq_resp.status_code == 200
+            assert groq_resp.json()["active_provider"] == "groq"
+            assert manager.get_active_provider() == "groq"
+            groq_info = next(p for p in groq_resp.json()["providers"] if p["id"] == "groq")
+            assert groq_info["configured"] is True
+            assert manager.get_groq_api_key() == "gsk_test_valid_groq_key"
+
+        # 6c. Replacement failure preserves existing valid key and leaves active provider unchanged
+        with patch.object(manager, "validate_groq_key", new_callable=AsyncMock) as mock_val_groq:
+            mock_val_groq.return_value = (False, "New key is invalid")
+            bad_repl_resp = client.post("/api/v1/providers/groq/key", json={"api_key": "gsk_broken_replacement"})
+            assert bad_repl_resp.status_code == 400
+            assert "New key is invalid" in bad_repl_resp.json()["detail"]
+            # Active provider unchanged
+            assert manager.get_active_provider() == "groq"
+            # Previous valid key preserved
+            assert manager.get_groq_api_key() == "gsk_test_valid_groq_key"
+
+    # 7. Verify all 4 cloud providers have independent key persistence
+    assert manager.get_gemini_api_key() == "AIzaSyTestValidRuntimeKey"
+    assert manager.get_anthropic_api_key() == "sk-ant-test-runtime-key"
+    assert manager.get_openai_api_key() == "sk-test-valid-openai-key"
+    assert manager.get_groq_api_key() == "gsk_test_valid_groq_key"
+
+    # 8. Switching between configured providers works cleanly
+    for prov_id in ("openai", "anthropic", "gemini", "ollama", "groq"):
+        sel_resp = client.post("/api/v1/providers/select", json={"provider": prov_id})
+        assert sel_resp.status_code == 200
+        assert sel_resp.json()["active_provider"] == prov_id
+        assert manager.get_active_provider() == prov_id
 
     # Reset test state
     manager._anthropic_api_key = None
     manager._gemini_api_key = None
+    manager._openai_api_key = None
+    manager._groq_api_key = None
     manager._active_provider = "ollama"

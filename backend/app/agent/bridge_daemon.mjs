@@ -385,6 +385,39 @@ const transcriptRetrievalTool = defineTool({
   },
 });
 
+async function resolveGroqModel(runtime, apiKey, requestedModel) {
+  const direct = runtime.getModel("groq", requestedModel);
+  try {
+    const resp = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const availableIds = new Set((data.data || []).map((m) => m.id));
+      if (availableIds.has(requestedModel) && direct) {
+        return direct;
+      }
+      // If requested model is not available for this account (e.g. decommissioned on free/developer tier),
+      // select the top compatible chat model available on Groq
+      const preferred = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "groq/compound"];
+      for (const pref of preferred) {
+        if (availableIds.has(pref)) {
+          const fallbackModel = runtime.getModel("groq", pref);
+          if (fallbackModel) {
+            console.error(
+              `[PI BRIDGE] Groq model '${requestedModel}' not accessible on account; using active Groq model '${pref}'`
+            );
+            return fallbackModel;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[PI BRIDGE] Could not query Groq models: ${err.message}`);
+  }
+  return direct || runtime.getModels().find((m) => m.provider === "groq");
+}
+
 async function executeTurn(params) {
   const { user_prompt, rewritten_query, history = [], provider = "ollama", model_name, api_key } = params;
 
@@ -429,6 +462,38 @@ async function executeTurn(params) {
       const available = runtime.getModels().filter((m) => m.provider === "google");
       model = available.find((m) => m.id.includes("flash")) || available[0];
     }
+  } else if (provider === "openai") {
+    const apiKey = api_key || process.env.OPENAI_API_KEY;
+    if (!apiKey || apiKey.trim() === "") {
+      throw new Error(
+        "ProviderConfigurationError: OpenAI API key is required when provider=openai. " +
+          "Zero silent fallback to Ollama is permitted. Please configure an API key in the UI.",
+      );
+    }
+    process.env.OPENAI_API_KEY = apiKey;
+    try {
+      runtime.setRuntimeApiKey("openai", apiKey);
+    } catch {}
+    const targetModel = model_name || process.env.OPENAI_MODEL || "gpt-4o";
+    model = runtime.getModel("openai", targetModel);
+    if (!model) {
+      const available = runtime.getModels().filter((m) => m.provider === "openai");
+      model = available.find((m) => m.id === "gpt-4o") || available[0];
+    }
+  } else if (provider === "groq") {
+    const apiKey = api_key || process.env.GROQ_API_KEY;
+    if (!apiKey || apiKey.trim() === "") {
+      throw new Error(
+        "ProviderConfigurationError: Groq API key is required when provider=groq. " +
+          "Zero silent fallback to Ollama is permitted. Please configure an API key in the UI.",
+      );
+    }
+    process.env.GROQ_API_KEY = apiKey;
+    try {
+      runtime.setRuntimeApiKey("groq", apiKey);
+    } catch {}
+    const targetModel = model_name || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    model = await resolveGroqModel(runtime, apiKey, targetModel);
   } else {
     // Ollama default
     const targetModel = model_name || process.env.OLLAMA_MODEL || "llama3.1:8b";
@@ -441,10 +506,17 @@ async function executeTurn(params) {
 
   const { session } = await createAgentSession({
     model,
+    modelRuntime: runtime,
     customTools: [transcriptRetrievalTool],
     noTools: "builtin",
     sessionManager: SessionManager.inMemory(),
   });
+
+  if (session.settingsManager) {
+    try {
+      session.settingsManager.setRetryEnabled(false);
+    } catch {}
+  }
 
   if (session.agent && session.agent.state) {
     session.agent.state.systemPrompt = LENNY_SYSTEM_PROMPT;
@@ -452,6 +524,9 @@ async function executeTurn(params) {
 
   let preToolText = "";
   let postToolText = "";
+  let turnErrorMessage = null;
+  let turnStopReason = null;
+
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
       const delta = event.assistantMessageEvent.delta;
@@ -460,6 +535,15 @@ async function executeTurn(params) {
         sendNotification("token_delta", { delta });
       } else {
         preToolText += delta;
+      }
+    }
+
+    if (event.type === "message_start" || event.type === "message_end" || event.type === "turn_end") {
+      if (event.message?.stopReason === "error") {
+        turnStopReason = "error";
+        if (event.message.errorMessage) {
+          turnErrorMessage = event.message.errorMessage;
+        }
       }
     }
   });
@@ -472,7 +556,8 @@ async function executeTurn(params) {
     }
     turnPrompt += "\n\nProvide a concise, evidence-grounded answer directly addressing what was asked. Do NOT invent unrequested lists of takeaways.";
 
-    console.error(`[PI AGENT] Invoking Pi session with model ${model.provider}/${model.id}...`);
+    const reportedModelId = model_name || (provider === "groq" ? (process.env.GROQ_MODEL || "llama-3.3-70b-versatile") : model.id);
+    console.error(`[PI AGENT] Invoking Pi session with model ${model.provider}/${reportedModelId}...`);
     await session.prompt(turnPrompt);
 
     // If the tool call was missing or bypassed by the LLM, deterministically execute retrieval with authoritative query
@@ -504,9 +589,10 @@ async function executeTurn(params) {
             tier: "Insufficient",
             top_score: decision.top_score || 0.0,
             can_synthesize: false,
+            generation_failed: false,
             decision,
             selected_evidence: [],
-            model: `${model.provider}/${model.id}`,
+            model: `${model.provider}/${reportedModelId}`,
           };
         }
 
@@ -528,14 +614,30 @@ async function executeTurn(params) {
     const rawResponse = currentTurnToolExecuted ? postToolText : preToolText;
     const finalResponse = sanitizeResponseText(rawResponse);
 
+    if (!finalResponse && (turnStopReason === "error" || turnErrorMessage)) {
+      console.error(`[PI AGENT] Generation failed with error: ${turnErrorMessage}`);
+      return {
+        response: `Generation failed with ${provider.charAt(0).toUpperCase() + provider.slice(1)}: ${turnErrorMessage || "No response generated"}. Please try again or switch providers.`,
+        tier: currentTurnDecision ? currentTurnDecision.tier : "Insufficient",
+        top_score: currentTurnDecision ? currentTurnDecision.top_score : 0.0,
+        can_synthesize: false,
+        generation_failed: true,
+        error_detail: turnErrorMessage,
+        decision: currentTurnDecision,
+        selected_evidence: currentTurnEvidence,
+        model: `${model.provider}/${reportedModelId}`,
+      };
+    }
+
     return {
       response: finalResponse,
       tier: currentTurnDecision ? currentTurnDecision.tier : "Insufficient",
       top_score: currentTurnDecision ? currentTurnDecision.top_score : 0.0,
       can_synthesize: currentTurnDecision ? currentTurnDecision.can_synthesize : false,
+      generation_failed: false,
       decision: currentTurnDecision,
       selected_evidence: currentTurnEvidence,
-      model: `${model.provider}/${model.id}`,
+      model: `${model.provider}/${reportedModelId}`,
     };
   } finally {
     unsubscribe();

@@ -3,7 +3,7 @@ import { Message, SourceReference } from '../../types';
 import { EvidenceIndicator } from './EvidenceIndicator';
 import { CitationBadge } from './CitationBadge';
 import { RefusalCard } from './RefusalCard';
-import { PenTool, Database } from 'lucide-react';
+import { PenTool, Database, AlertCircle } from 'lucide-react';
 
 interface AnswerBlockProps {
   message: Message;
@@ -18,9 +18,10 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
 }) => {
   const normalizedTier = message.evidence_tier?.toLowerCase();
   const isInsufficient = normalizedTier === 'insufficient';
+  const isGenerationFailed = message.content?.startsWith('Generation failed with');
   const sources = message.sources || [];
 
-  if (isInsufficient) {
+  if (isInsufficient && !isGenerationFailed) {
     return <RefusalCard content={message.content} />;
   }
 
@@ -37,15 +38,27 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
       </div>
 
       {/* Main Content Body */}
-      <div className="prose prose-slate dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-        {message.content}
-        {message.isStreaming && (
-          <span className="inline-block w-1.5 h-4 ml-1 bg-brand-500 animate-pulse align-middle" />
-        )}
-      </div>
+      {isGenerationFailed ? (
+        <div className="flex items-start space-x-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs sm:text-sm">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-medium">Generation Error</div>
+            <div className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              {message.content}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="prose prose-slate dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+          {message.content}
+          {message.isStreaming && (
+            <span className="inline-block w-1.5 h-4 ml-1 bg-brand-500 animate-pulse align-middle" />
+          )}
+        </div>
+      )}
 
       {/* Citation Badges */}
-      {sources.length > 0 && (
+      {!isGenerationFailed && sources.length > 0 && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 mr-1 flex items-center">
             <Database className="w-3 h-3 mr-1" /> Sources:
@@ -62,7 +75,7 @@ export const AnswerBlock: React.FC<AnswerBlockProps> = ({
       )}
 
       {/* Artifact Action Bar - only render for valid, non-refusal answers with evidence */}
-      {!message.isStreaming && message.content && !isInsufficient && sources.length > 0 && (
+      {!message.isStreaming && message.content && !isInsufficient && !isGenerationFailed && sources.length > 0 && (
         <div className="pt-2 flex items-center space-x-2">
           <button
             onClick={() => onCreateArtifact(message)}
