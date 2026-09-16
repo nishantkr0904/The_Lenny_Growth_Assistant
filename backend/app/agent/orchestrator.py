@@ -102,7 +102,11 @@ class QnAOrchestrator:
         # 3. Check provider configuration and handle missing cloud API key
         manager = ProviderManager.get_instance()
         active_provider = manager.get_active_provider()
-        active_key = manager.get_anthropic_api_key() if active_provider == "anthropic" else None
+        active_key = (
+            manager.get_anthropic_api_key() if active_provider == "anthropic"
+            else manager.get_gemini_api_key() if active_provider == "gemini"
+            else None
+        )
 
         if active_provider == "anthropic" and not active_key:
             err_msg = (
@@ -133,6 +137,36 @@ class QnAOrchestrator:
                 sources=[],
                 latency_ms=elapsed_ms,
                 model_used="anthropic/unconfigured",
+            )
+        elif active_provider == "gemini" and not active_key:
+            err_msg = (
+                "Google Gemini API key is required when Gemini provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="gemini/unconfigured",
+            )
+            return QnAResult(
+                session_id=session_id,
+                message_id=asst_msg.id,
+                role="assistant",
+                content=err_msg,
+                grounding={
+                    "tier": "Insufficient",
+                    "can_synthesize": False,
+                    "top_score": 0.0,
+                    "agent": "provider-gate",
+                },
+                sources=[],
+                latency_ms=elapsed_ms,
+                model_used="gemini/unconfigured",
             )
 
         # 4. Check conversational intent before retrieval / rewriting
@@ -198,12 +232,17 @@ class QnAOrchestrator:
 
         # 8. Execute turn through Pi Coding Agent
         logger.info("Dispatching turn to Pi Coding Agent for session %s (provider=%s)...", session_id, active_provider)
+        target_model = (
+            settings.ANTHROPIC_MODEL if active_provider == "anthropic"
+            else settings.GEMINI_MODEL if active_provider == "gemini"
+            else settings.OLLAMA_MODEL
+        )
         pi_result = await self.pi_bridge.execute_turn(
             user_prompt=user_content,
             rewritten_query=retrieval_query,
             history=formatted_history,
             provider=active_provider,
-            model_name=settings.ANTHROPIC_MODEL if active_provider == "anthropic" else settings.OLLAMA_MODEL,
+            model_name=target_model,
             api_key=active_key,
         )
 
@@ -307,7 +346,11 @@ class QnAOrchestrator:
         # 3. Check provider configuration and handle missing cloud API key
         manager = ProviderManager.get_instance()
         active_provider = manager.get_active_provider()
-        active_key = manager.get_anthropic_api_key() if active_provider == "anthropic" else None
+        active_key = (
+            manager.get_anthropic_api_key() if active_provider == "anthropic"
+            else manager.get_gemini_api_key() if active_provider == "gemini"
+            else None
+        )
 
         if active_provider == "anthropic" and not active_key:
             err_msg = (
@@ -324,6 +367,33 @@ class QnAOrchestrator:
                 evidence_tier="Insufficient",
                 latency_ms=elapsed_ms,
                 model_used="anthropic/unconfigured",
+            )
+            done_payload = {
+                "message_id": asst_msg.id,
+                "session_id": session_id,
+                "latency_ms": elapsed_ms,
+                "tier": "Insufficient",
+                "can_synthesize": False,
+                "sources": [],
+                "agent": "provider-gate",
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
+            return
+        elif active_provider == "gemini" and not active_key:
+            err_msg = (
+                "Google Gemini API key is required when Gemini provider is selected. "
+                "Please configure an API key in the provider settings or switch to Ollama."
+            )
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            yield f"event: delta\ndata: {json.dumps({'text': err_msg})}\n\n"
+            asst_msg = await SessionStore.save_message(
+                db=db,
+                session_id=session_id,
+                role="assistant",
+                content=err_msg,
+                evidence_tier="Insufficient",
+                latency_ms=elapsed_ms,
+                model_used="gemini/unconfigured",
             )
             done_payload = {
                 "message_id": asst_msg.id,
@@ -421,7 +491,11 @@ class QnAOrchestrator:
             rewritten_query=retrieval_query,
             history=formatted_history,
             provider=active_provider,
-            model_name=settings.ANTHROPIC_MODEL if active_provider == "anthropic" else settings.OLLAMA_MODEL,
+            model_name=(
+                settings.ANTHROPIC_MODEL if active_provider == "anthropic"
+                else settings.GEMINI_MODEL if active_provider == "gemini"
+                else settings.OLLAMA_MODEL
+            ),
             api_key=active_key,
         ):
             event_type = item["event"]

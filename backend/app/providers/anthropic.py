@@ -38,6 +38,43 @@ class AnthropicGenerationProvider(GenerationProvider):
     def model_name(self) -> str:
         return self._model
 
+    @staticmethod
+    async def validate_api_key(api_key: str, timeout: float = 8.0) -> tuple[bool, str]:
+        """
+        Validate an Anthropic API key against the models endpoint.
+        Returns (is_valid, message). Fast check with zero token generation.
+        """
+        clean_key = api_key.strip()
+        if not clean_key:
+            return False, "API key cannot be empty."
+
+        import httpx
+        url = "https://api.anthropic.com/v1/models"
+        headers = {
+            "x-api-key": clean_key,
+            "anthropic-version": "2023-06-01",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    return True, "API key is valid."
+
+                try:
+                    err_json = resp.json()
+                    err_msg = (
+                        err_json.get("error", {}).get("message")
+                        or f"HTTP {resp.status_code}: {resp.text[:200]}"
+                    )
+                except Exception:
+                    err_msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+                return False, err_msg
+        except httpx.TimeoutException:
+            return False, "Validation request timed out connecting to Anthropic API."
+        except Exception as exc:
+            return False, f"Network error connecting to Anthropic API: {exc}"
+
     def _get_client(self) -> AsyncAnthropic:
         if self._client is None:
             self._client = AsyncAnthropic(api_key=self.api_key)

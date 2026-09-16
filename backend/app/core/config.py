@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     HOST_PORT_FRONTEND: int = 3000
     HOST_PORT_OLLAMA: int = 11434
 
-    # Active LLM Provider (P0: 'ollama' default local, 'anthropic' selected cloud)
-    LLM_PROVIDER: Literal["ollama", "anthropic", "openai"] = "ollama"
+    # Active LLM Provider (Options: 'ollama', 'anthropic', 'gemini', 'openai')
+    LLM_PROVIDER: Literal["ollama", "anthropic", "gemini", "openai"] = "ollama"
 
     # Ollama Configuration (Local Demo Default — Generation)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Cloud Providers (Optional / Generation Only)
     ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o"

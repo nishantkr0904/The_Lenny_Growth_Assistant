@@ -68,6 +68,10 @@ class PiBridgeClient:
             env["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
         if settings.ANTHROPIC_MODEL:
             env["ANTHROPIC_MODEL"] = settings.ANTHROPIC_MODEL
+        if settings.GEMINI_API_KEY:
+            env["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
+        if settings.GEMINI_MODEL:
+            env["GEMINI_MODEL"] = settings.GEMINI_MODEL
 
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -162,12 +166,23 @@ class PiBridgeClient:
             self._request_counter += 1
             req_id = f"turn-{self._request_counter}"
 
+            chosen_provider = provider or settings.LLM_PROVIDER
+            if not model_name:
+                if chosen_provider == "anthropic":
+                    chosen_model = settings.ANTHROPIC_MODEL
+                elif chosen_provider in ("gemini", "google"):
+                    chosen_model = settings.GEMINI_MODEL
+                else:
+                    chosen_model = settings.OLLAMA_MODEL
+            else:
+                chosen_model = model_name
+
             params = {
                 "user_prompt": user_prompt,
                 "rewritten_query": rewritten_query or user_prompt,
                 "history": history or [],
-                "provider": provider or settings.LLM_PROVIDER,
-                "model_name": model_name or (settings.ANTHROPIC_MODEL if provider == "anthropic" else settings.OLLAMA_MODEL),
+                "provider": chosen_provider,
+                "model_name": chosen_model,
             }
             if api_key:
                 params["api_key"] = api_key

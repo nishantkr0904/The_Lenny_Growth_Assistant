@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HealthStatus, ProviderStatusResponse } from '../../types';
-import { Cpu, Plus, Sparkles, Moon, Sun, Key, Check, AlertCircle, X, ChevronDown } from 'lucide-react';
-import { fetchProviders, selectProvider, saveAnthropicKey } from '../../services/api';
+import { Cpu, Plus, Sparkles, Moon, Sun, Key, Check, AlertCircle, X, ChevronDown, Loader2 } from 'lucide-react';
+import { fetchProviders, selectProvider, saveAnthropicKey, saveGeminiKey } from '../../services/api';
 
 interface HeaderProps {
   health: HealthStatus | null;
   onNewSession: () => void;
-  activeProvider?: 'ollama' | 'anthropic';
-  onProviderChange?: (provider: 'ollama' | 'anthropic') => void;
+  activeProvider?: 'ollama' | 'anthropic' | 'gemini';
+  onProviderChange?: (provider: 'ollama' | 'anthropic' | 'gemini') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,10 +56,11 @@ export const Header: React.FC<HeaderProps> = ({
   // Provider configuration management
   const [isProviderMenuOpen, setIsProviderMenuOpen] = useState(false);
   const [providerData, setProviderData] = useState<ProviderStatusResponse | null>(null);
+  const [editingProvider, setEditingProvider] = useState<'gemini' | 'anthropic' | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
-  const [isEditingKey, setIsEditingKey] = useState(false);
-  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,23 +85,39 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isProviderMenuOpen]);
 
-  const activeProvider =
+  const activeProvider: 'ollama' | 'anthropic' | 'gemini' =
     providerData?.active_provider ||
     propActiveProvider ||
-    (health?.provider === 'anthropic' ? 'anthropic' : 'ollama');
+    (health?.provider === 'anthropic' ? 'anthropic' : health?.provider === 'gemini' ? 'gemini' : 'ollama');
+
+  const geminiInfo = providerData?.providers.find((p) => p.id === 'gemini');
+  const isGeminiConfigured = geminiInfo ? geminiInfo.configured : false;
 
   const anthropicInfo = providerData?.providers.find((p) => p.id === 'anthropic');
   const isAnthropicConfigured = anthropicInfo ? anthropicInfo.configured : false;
 
-  const handleSelectProvider = async (p: 'ollama' | 'anthropic') => {
+  const handleSelectProvider = async (p: 'ollama' | 'anthropic' | 'gemini') => {
     setErrorMessage(null);
+    setSuccessMessage(null);
+
+    // If cloud provider is NOT configured, active remains unchanged and configuration opens
+    if (p === 'gemini' && !isGeminiConfigured) {
+      setEditingProvider('gemini');
+      setApiKeyInput('');
+      return;
+    }
+
+    if (p === 'anthropic' && !isAnthropicConfigured) {
+      setEditingProvider('anthropic');
+      setApiKeyInput('');
+      return;
+    }
+
     try {
       const updated = await selectProvider(p);
       setProviderData(updated);
       onProviderChange?.(p);
-      if (p === 'anthropic' && !updated.providers.find((x) => x.id === 'anthropic')?.configured) {
-        setIsEditingKey(true);
-      }
+      setEditingProvider(null);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to switch provider');
     }
@@ -108,19 +125,31 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleSaveKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKeyInput.trim()) return;
-    setIsSavingKey(true);
+    if (!apiKeyInput.trim() || !editingProvider) return;
+
+    setIsValidatingKey(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
+
     try {
-      const updated = await saveAnthropicKey(apiKeyInput.trim());
+      let updated: ProviderStatusResponse;
+      if (editingProvider === 'gemini') {
+        updated = await saveGeminiKey(apiKeyInput.trim());
+      } else {
+        updated = await saveAnthropicKey(apiKeyInput.trim());
+      }
+
       setProviderData(updated);
-      onProviderChange?.('anthropic');
+      onProviderChange?.(editingProvider);
       setApiKeyInput('');
-      setIsEditingKey(false);
+      const providerLabel = editingProvider === 'gemini' ? 'Google Gemini' : 'Anthropic';
+      setSuccessMessage(`${providerLabel} API key validated and activated.`);
+      setEditingProvider(null);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save Anthropic key');
+      // On FAIL: active provider remains unchanged (e.g. Ollama), error is shown
+      setErrorMessage(err.message || `Failed to validate ${editingProvider} API key`);
     } finally {
-      setIsSavingKey(false);
+      setIsValidatingKey(false);
     }
   };
 
@@ -146,6 +175,22 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="w-1.5 h-1.5 mr-1.5 bg-emerald-500 rounded-full"></span>
           <span>Ollama (llama3.1:8b)</span>
           <ChevronDown className="w-3 h-3 ml-1 text-emerald-600 dark:text-emerald-400 opacity-60" />
+        </button>
+      );
+    }
+
+    if (activeProvider === 'gemini') {
+      return (
+        <button
+          type="button"
+          onClick={() => setIsProviderMenuOpen(!isProviderMenuOpen)}
+          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/60 transition cursor-pointer"
+          title="Click to configure generation provider"
+          aria-label="Select LLM generation provider"
+        >
+          <span className="w-1.5 h-1.5 mr-1.5 bg-sky-500 rounded-full"></span>
+          <span>Gemini (gemini-2.5-flash)</span>
+          <ChevronDown className="w-3 h-3 ml-1 text-sky-600 dark:text-sky-400 opacity-60" />
         </button>
       );
     }
@@ -222,7 +267,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsProviderMenuOpen(false)}
+                  onClick={() => {
+                    setIsProviderMenuOpen(false);
+                    setEditingProvider(null);
+                  }}
                   className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded"
                   aria-label="Close provider menu"
                 >
@@ -234,6 +282,13 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 rounded text-red-700 dark:text-red-300 text-[11px] flex items-center space-x-1.5">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="mb-3 p-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 rounded text-emerald-700 dark:text-emerald-300 text-[11px] flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  <span>{successMessage}</span>
                 </div>
               )}
 
@@ -265,7 +320,115 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
                 </button>
 
-                {/* Option 2: Anthropic Cloud */}
+                {/* Option 2: Google Gemini Cloud */}
+                <div
+                  className={`rounded-lg border transition ${
+                    activeProvider === 'gemini'
+                      ? 'border-sky-500 bg-sky-50/40 dark:bg-sky-950/30'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProvider('gemini')}
+                    className="w-full p-3 text-left flex items-start justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center space-x-1.5 font-medium text-slate-900 dark:text-slate-100">
+                        <span className="w-2 h-2 rounded-full bg-sky-500" />
+                        <span>Google Gemini · Cloud</span>
+                        <span className="text-[10px] bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 px-1.5 py-0.2 rounded font-mono">
+                          gemini-2.5-flash
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        High-speed multimodal reasoning and synthesis powered by Google.
+                      </p>
+                    </div>
+                    {activeProvider === 'gemini' && (
+                      <Check className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+                    )}
+                  </button>
+
+                  {/* Gemini Key Configuration Sub-section */}
+                  <div className="px-3 pb-3 pt-1 border-t border-sky-100 dark:border-sky-900/40">
+                    {editingProvider !== 'gemini' ? (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Key className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {isGeminiConfigured ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                API Key: Configured
+                              </span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                API Key: Not Configured
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProvider('gemini');
+                            setApiKeyInput('');
+                            setErrorMessage(null);
+                          }}
+                          className="text-sky-600 dark:text-sky-400 hover:underline font-medium"
+                        >
+                          {isGeminiConfigured ? 'Update Key' : 'Configure Key'}
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveKey} className="space-y-2 pt-1">
+                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>Enter Google Gemini API Key:</span>
+                          <span className="text-[10px] text-slate-400">Validated live</span>
+                        </div>
+                        <input
+                          type="password"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          autoFocus
+                          disabled={isValidatingKey}
+                        />
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProvider(null);
+                              setApiKeyInput('');
+                              setErrorMessage(null);
+                            }}
+                            disabled={isValidatingKey}
+                            className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!apiKeyInput.trim() || isValidatingKey}
+                            className="inline-flex items-center px-2.5 py-1 text-[11px] font-medium text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 rounded shadow-xs"
+                          >
+                            {isValidatingKey ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                <span>Validating...</span>
+                              </>
+                            ) : (
+                              <span>Save & Activate</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+
+                {/* Option 3: Anthropic Cloud */}
                 <div
                   className={`rounded-lg border transition ${
                     activeProvider === 'anthropic'
@@ -297,7 +460,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                   {/* Anthropic Key Configuration Sub-section */}
                   <div className="px-3 pb-3 pt-1 border-t border-purple-100 dark:border-purple-900/40">
-                    {!isEditingKey ? (
+                    {editingProvider !== 'anthropic' ? (
                       <div className="flex items-center justify-between text-[11px]">
                         <div className="flex items-center space-x-1.5">
                           <Key className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
@@ -315,7 +478,11 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setIsEditingKey(true)}
+                          onClick={() => {
+                            setEditingProvider('anthropic');
+                            setApiKeyInput('');
+                            setErrorMessage(null);
+                          }}
                           className="text-purple-600 dark:text-purple-400 hover:underline font-medium"
                         >
                           {isAnthropicConfigured ? 'Update Key' : 'Configure Key'}
@@ -323,8 +490,9 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     ) : (
                       <form onSubmit={handleSaveKey} className="space-y-2 pt-1">
-                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          Enter Anthropic API Key:
+                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>Enter Anthropic API Key:</span>
+                          <span className="text-[10px] text-slate-400">Validated live</span>
                         </div>
                         <input
                           type="password"
@@ -333,24 +501,34 @@ export const Header: React.FC<HeaderProps> = ({
                           placeholder="sk-ant-api03-..."
                           className="w-full px-2.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
                           autoFocus
+                          disabled={isValidatingKey}
                         />
                         <div className="flex items-center justify-end space-x-2">
                           <button
                             type="button"
                             onClick={() => {
-                              setIsEditingKey(false);
+                              setEditingProvider(null);
                               setApiKeyInput('');
+                              setErrorMessage(null);
                             }}
+                            disabled={isValidatingKey}
                             className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
                           >
                             Cancel
                           </button>
                           <button
                             type="submit"
-                            disabled={!apiKeyInput.trim() || isSavingKey}
-                            className="px-2.5 py-1 text-[11px] font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded shadow-xs"
+                            disabled={!apiKeyInput.trim() || isValidatingKey}
+                            className="inline-flex items-center px-2.5 py-1 text-[11px] font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded shadow-xs"
                           >
-                            {isSavingKey ? 'Saving...' : 'Save Key'}
+                            {isValidatingKey ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                <span>Validating...</span>
+                              </>
+                            ) : (
+                              <span>Save & Activate</span>
+                            )}
                           </button>
                         </div>
                       </form>

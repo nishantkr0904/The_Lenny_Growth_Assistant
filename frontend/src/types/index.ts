@@ -72,7 +72,7 @@ export interface HealthStatus {
 export type RightPanelView = 'sources' | 'artifact' | null;
 
 export interface ProviderInfo {
-  id: 'ollama' | 'anthropic';
+  id: 'ollama' | 'anthropic' | 'gemini';
   name: string;
   type: 'local' | 'cloud';
   model: string;
@@ -80,6 +80,6 @@ export interface ProviderInfo {
 }
 
 export interface ProviderStatusResponse {
-  active_provider: 'ollama' | 'anthropic';
+  active_provider: 'ollama' | 'anthropic' | 'gemini';
   providers: ProviderInfo[];
 }

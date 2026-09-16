@@ -37,7 +37,19 @@ describe('Header Component', () => {
     expect(screen.getByText('Anthropic (Claude 3.5 Sonnet)')).toBeInTheDocument();
   });
 
-  it('toggles provider menu and shows options when badge is clicked', () => {
+  it('renders provider badge for Gemini when configured', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'gemini' as any,
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    expect(screen.getByText('Gemini (gemini-2.5-flash)')).toBeInTheDocument();
+  });
+
+  it('toggles provider menu and shows options including Gemini when badge is clicked', () => {
     const health: HealthStatus = {
       status: 'ok',
       database: 'connected',
@@ -51,7 +63,35 @@ describe('Header Component', () => {
 
     expect(screen.getByText('Generation Provider')).toBeInTheDocument();
     expect(screen.getByText(/Ollama · Local/i)).toBeInTheDocument();
+    expect(screen.getByText(/Google Gemini · Cloud/i)).toBeInTheDocument();
     expect(screen.getByText(/Anthropic · Cloud/i)).toBeInTheDocument();
+  });
+
+  it('clicking unconfigured Gemini opens API key form while Ollama remains active', () => {
+    const health: HealthStatus = {
+      status: 'ok',
+      database: 'connected',
+      ollama: 'reachable',
+      provider: 'ollama',
+      version: '0.1.0',
+    };
+    render(<Header health={health} onNewSession={() => {}} />);
+    const badgeButton = screen.getByRole('button', { name: /Select LLM generation provider/i });
+    fireEvent.click(badgeButton);
+
+    // Click Google Gemini card
+    const geminiCard = screen.getByText(/Google Gemini · Cloud/i);
+    fireEvent.click(geminiCard);
+
+    // Form appears asking for Gemini key
+    expect(screen.getByText(/Enter Google Gemini API Key:/i)).toBeInTheDocument();
+    // Ollama remains active in header badge
+    expect(screen.getByText('Ollama (llama3.1:8b)')).toBeInTheDocument();
+
+    // Cancel button resets form
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByText(/Enter Google Gemini API Key:/i)).toBeNull();
   });
 
   it('toggles dark mode theme and adds dark class to documentElement', () => {

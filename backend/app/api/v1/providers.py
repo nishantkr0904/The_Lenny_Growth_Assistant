@@ -13,11 +13,15 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 
 
 class ProviderSelectRequest(BaseModel):
-    provider: Literal["ollama", "anthropic"]
+    provider: Literal["ollama", "anthropic", "gemini"]
 
 
 class AnthropicKeyRequest(BaseModel):
     api_key: str = Field(..., min_length=1, description="Anthropic API key")
+
+
+class GeminiKeyRequest(BaseModel):
+    api_key: str = Field(..., min_length=1, description="Google Gemini API key")
 
 
 class ProviderStatusItem(BaseModel):
@@ -42,7 +46,7 @@ async def get_providers() -> ProviderStatusResponse:
 
 @router.post("/select", response_model=ProviderStatusResponse, summary="Select active LLM generation provider")
 async def select_provider(payload: ProviderSelectRequest) -> ProviderStatusResponse:
-    """Switch the active LLM generation provider between local Ollama and cloud Anthropic."""
+    """Switch the active LLM generation provider between local Ollama and cloud providers."""
     manager = ProviderManager.get_instance()
     try:
         manager.set_active_provider(payload.provider)
@@ -54,10 +58,39 @@ async def select_provider(payload: ProviderSelectRequest) -> ProviderStatusRespo
     return ProviderStatusResponse(**manager.get_provider_status())
 
 
+@router.post("/gemini/key", response_model=ProviderStatusResponse, summary="Configure Google Gemini cloud API key")
+async def configure_gemini_key(payload: GeminiKeyRequest) -> ProviderStatusResponse:
+    """
+    Validate, save, and activate Google Gemini cloud API key in the runtime credential store.
+    Validates the key against Google's API before updating active provider.
+    Never logs or echoes back the secret key in plaintext.
+    """
+    key_clean = payload.api_key.strip()
+    if not key_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Gemini API key cannot be empty or whitespace.",
+        )
+
+    manager = ProviderManager.get_instance()
+    is_valid, err_msg = await manager.validate_gemini_key(key_clean)
+    if not is_valid:
+        logger.warning("Gemini API key validation failed: %s", err_msg)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google Gemini API key validation failed: {err_msg}",
+        )
+
+    manager.set_gemini_api_key(key_clean)
+    manager.set_active_provider("gemini")
+    return ProviderStatusResponse(**manager.get_provider_status())
+
+
 @router.post("/anthropic/key", response_model=ProviderStatusResponse, summary="Configure Anthropic cloud API key")
 async def configure_anthropic_key(payload: AnthropicKeyRequest) -> ProviderStatusResponse:
     """
-    Save or update the Anthropic cloud API key in the runtime credential store.
+    Validate, save, and activate Anthropic cloud API key in the runtime credential store.
+    Validates the key against Anthropic's API before updating active provider.
     Never logs or echoes back the secret key in plaintext.
     """
     key_clean = payload.api_key.strip()
@@ -68,6 +101,14 @@ async def configure_anthropic_key(payload: AnthropicKeyRequest) -> ProviderStatu
         )
 
     manager = ProviderManager.get_instance()
+    is_valid, err_msg = await manager.validate_anthropic_key(key_clean)
+    if not is_valid:
+        logger.warning("Anthropic API key validation failed: %s", err_msg)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Anthropic API key validation failed: {err_msg}",
+        )
+
     manager.set_anthropic_api_key(key_clean)
     manager.set_active_provider("anthropic")
     return ProviderStatusResponse(**manager.get_provider_status())

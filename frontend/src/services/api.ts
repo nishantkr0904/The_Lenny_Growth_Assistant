@@ -25,7 +25,7 @@ export async function fetchProviders(): Promise<ProviderStatusResponse> {
   return res.json();
 }
 
-export async function selectProvider(provider: 'ollama' | 'anthropic'): Promise<ProviderStatusResponse> {
+export async function selectProvider(provider: 'ollama' | 'anthropic' | 'gemini'): Promise<ProviderStatusResponse> {
   const res = await fetch(`${API_BASE}/providers/select`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,6 +47,19 @@ export async function saveAnthropicKey(apiKey: string): Promise<ProviderStatusRe
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Failed to save Anthropic API key');
+  }
+  return res.json();
+}
+
+export async function saveGeminiKey(apiKey: string): Promise<ProviderStatusResponse> {
+  const res = await fetch(`${API_BASE}/providers/gemini/key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Failed to save Google Gemini API key');
   }
   return res.json();
 }

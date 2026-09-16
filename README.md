@@ -76,10 +76,10 @@ The Lenny Growth Assistant eliminates these bottlenecks by grounding every answe
 - **Ship 30 for 30 essays:** Transforms grounded research into ~1,250-word structured essays following 7 core Ship 30 principles (hook, clear thesis, 1-3-1 cadence, single-sentence paragraphs, bullet transitions, and actionable takeaways).
 - **Markdown & HTML/CSS artifacts:** Compiles executive summaries, decision matrices, and visual cards rendered alongside the chat.
 - **Artifact workspace:** Live preview, raw source inspection, one-click clipboard copying, and file export (`.md` / `.html`).
-- **Interactive Provider Selector & Cloud API Key Configuration:** Switch between `Ollama · Local` (`llama3.1:8b`) and `Anthropic · Cloud` (`claude-3-5-sonnet`) directly in the UI Header. Evaluators can configure their Anthropic API key via an in-app popover modal without modifying `.env` or restarting containers. Strictly enforces zero silent fallback if cloud credentials are missing.
+- **Interactive Provider Selector & Cloud API Key Configuration:** Switch between `Ollama · Local` (`llama3.1:8b`), `Google Gemini · Cloud` (`gemini-2.5-flash`), and `Anthropic · Cloud` (`claude-3-5-sonnet`) directly in the UI Header. Evaluators can configure their cloud API keys via an in-app popover modal with live pre-flight validation against provider endpoints without modifying `.env` or restarting containers. Strictly enforces zero silent fallback if cloud credentials are missing.
 - **Session Lifecycle & Cascade Deletion:** Create and switch between multiple research sessions, or delete individual sessions with a single click in the sidebar, with automated relational cascade across messages, sources, and artifacts in PostgreSQL.
 - **Adaptive Light / Dark Mode:** Full UI theme switcher (Sun / Moon) in the header with high-contrast, polished styling across chat, sidebar, citation drawers, and artifact viewers, persisted in browser `localStorage`.
-- **Local-first with cloud flexibility:** Runs 100% locally with Ollama (`llama3.1:8b`) with zero cloud dependencies or API keys required, while supporting clean configuration-driven switching to Anthropic Claude.
+- **Local-first with cloud flexibility:** Runs 100% locally with Ollama (`llama3.1:8b`) with zero cloud dependencies or API keys required, while supporting clean configuration-driven switching to Google Gemini or Anthropic Claude.
 
 ---
 
@@ -353,20 +353,28 @@ GROUNDING_STRONG_THRESHOLD=0.78
 GROUNDING_LIMITED_THRESHOLD=0.65
 ```
 
-### Optional Cloud Configuration (Anthropic)
+### Optional Cloud Configuration (Google Gemini & Anthropic)
 
-To switch generation to Anthropic Claude 3.5 Sonnet, update `.env`:
+To switch generation to Google Gemini or Anthropic Claude via `.env` at boot, update `.env`:
 
 ```env
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+# Google Gemini
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+
+# Anthropic Claude
+# LLM_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 ```
 
-> **Note on Provider Switching:**
-> - Switching `LLM_PROVIDER` affects generation only.
-> - Corpus embeddings remain fixed to `nomic-embed-text` via Ollama at 768 dimensions.
-> - If `LLM_PROVIDER=anthropic` is set but `ANTHROPIC_API_KEY` is missing or invalid, the backend returns an explicit error. There is no silent fallback to Ollama.
+> **Note on Provider Switching & Live Validation:**
+> - Evaluators can also configure and switch providers live in the running UI Header popover.
+> - Submitting an API key triggers live pre-flight validation against provider endpoints (`generativelanguage.googleapis.com` or `api.anthropic.com`).
+> - If validation fails, active provider remains unchanged (Ollama) and an explicit error is shown.
+> - Switching `LLM_PROVIDER` affects generation only; corpus embeddings remain strictly fixed to `nomic-embed-text` via Ollama at 768 dimensions in PostgreSQL pgvector.
+> - Zero silent fallback: If an unconfigured cloud provider is invoked, the backend returns an explicit error without falling back to Ollama.
 
 ---
 
@@ -382,7 +390,7 @@ The backend suite covers API routing, GroundingGate evaluation, Pi RPC bridge co
 docker compose exec backend pytest -v
 ```
 
-**Result: 114 passed in 6.8s**
+**Result: 122 passed in 11.9s**
 
 | Test Module | Tests | Scope Covered | Status |
 |:---|:---|:---|:---|
@@ -394,17 +402,18 @@ docker compose exec backend pytest -v
 | `test_config.py` | 3 | Pydantic settings validation, port mappings | **PASS** |
 | `test_conversational_intent.py` | 5 | Casual greetings routing, knowledge query dispatch, artifact safety | **PASS** |
 | `test_embeddings.py` | 5 | Batch `/api/embed` processing, dimensionality enforcement | **PASS** |
+| `test_gemini.py` | 8 | Google Gemini generate, streaming, live key validation, factory resolution | **PASS** |
 | `test_health.py` | 4 | Readiness probes, database and provider connectivity | **PASS** |
 | `test_ingestion.py` | 4 | Pipeline execution, idempotency, deduplication | **PASS** |
 | `test_parser.py` | 4 | Frontmatter extraction, metadata normalization | **PASS** |
 | `test_pi_bridge.py` | 10 | Stdio JSON-RPC lifecycle, tool query preservation, compound routing | **PASS** |
-| `test_providers.py` | 9 | Ollama adapter, Anthropic provider, dynamic provider switching, key isolation | **PASS** |
+| `test_providers.py` | 7 | Ollama, Anthropic, Gemini adapters, unconfigured selection rejections, live validation | **PASS** |
 | `test_qna_api.py` | 5 | Q&A endpoints, empty query rejection, SSE headers | **PASS** |
 | `test_retrieval.py` | 23 | HNSW cosine search, GroundingGate tiers, uppercase acronym boost | **PASS** |
 | `test_rewriter.py` | 5 | Conversational pronoun resolution, multi-turn state | **PASS** |
 | `test_security_sanitization.py` | 6 | Bleach script stripping, event handler removal, CSP injection | **PASS** |
-| `test_sessions.py` | 4 | Session CRUD, multi-session isolation, cascading session deletion | **PASS** |
-| **Total Backend** | **114** | **Complete backend coverage** | **PASS** |
+| `test_sessions.py` | 5 | Session CRUD, multi-session isolation, cascading session deletion | **PASS** |
+| **Total Backend** | **122** | **Complete backend coverage** | **PASS** |
 
 ### 2. Automated Frontend Test Suite (Vitest)
 
@@ -412,7 +421,7 @@ docker compose exec backend pytest -v
 cd frontend && npm test
 ```
 
-**Result: 16 passed (16 tests in `components.test.tsx`)**
+**Result: 18 passed (18 tests in `components.test.tsx`)**
 - Chat interface rendering and input submission
 - Live token streaming state transitions
 - Citation badge rendering and click interactions
@@ -518,7 +527,7 @@ The current implementation satisfies all core research and artifact generation r
 
 - **Artifact version history & in-app editing:** The current implementation compiles immutable artifacts with raw source view, clipboard copying, and file download. Direct in-browser rich text editing is deferred.
 - **Automated corpus refresh:** Transcripts are ingested via the idempotent CLI pipeline (`python -m scripts.ingest`). Automated scraping of newly released episodes via RSS is deferred.
-- **Additional cloud providers:** Anthropic Claude 3.5 Sonnet is implemented and configuration-driven. OpenAI GPT-4o and Google Gemini adapters are deferred.
+- **Additional cloud providers:** Anthropic Claude 3.5 Sonnet and Google Gemini 2.5 Flash are fully implemented and verified. OpenAI GPT-4o adapter is deferred.
 - **Mobile-native UI layout:** The web application is optimized for desktop product and growth research workflows.
 
 ---

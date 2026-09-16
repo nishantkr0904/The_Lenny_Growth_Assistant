@@ -104,8 +104,9 @@ def test_provider_manager_and_api(tmp_path):
 
     manager = ProviderManager.get_instance()
     # Reset to known state
-    manager.set_active_provider("ollama")
+    manager._active_provider = "ollama"
     manager._anthropic_api_key = None
+    manager._gemini_api_key = None
 
     client = TestClient(app)
 
@@ -114,35 +115,91 @@ def test_provider_manager_and_api(tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert data["active_provider"] == "ollama"
-    assert len(data["providers"]) == 2
+    assert len(data["providers"]) == 3
     ollama_info = next(p for p in data["providers"] if p["id"] == "ollama")
     assert ollama_info["configured"] is True
+    gemini_info = next(p for p in data["providers"] if p["id"] == "gemini")
+    assert gemini_info["configured"] is False
+    anthropic_info = next(p for p in data["providers"] if p["id"] == "anthropic")
+    assert anthropic_info["configured"] is False
 
-    # 2. POST /api/v1/providers/select
-    select_resp = client.post("/api/v1/providers/select", json={"provider": "anthropic"})
-    assert select_resp.status_code == 200
-    assert select_resp.json()["active_provider"] == "anthropic"
-    assert manager.get_active_provider() == "anthropic"
+    # 2. POST /api/v1/providers/select unconfigured fails (active provider remains ollama)
+    unconf_gemini = client.post("/api/v1/providers/select", json={"provider": "gemini"})
+    assert unconf_gemini.status_code == 400
+    assert "Gemini API key is not configured" in unconf_gemini.json()["detail"]
+    assert manager.get_active_provider() == "ollama"
+
+    unconf_ant = client.post("/api/v1/providers/select", json={"provider": "anthropic"})
+    assert unconf_ant.status_code == 400
+    assert "Anthropic API key is not configured" in unconf_ant.json()["detail"]
+    assert manager.get_active_provider() == "ollama"
 
     # Reject invalid provider selection
     bad_select = client.post("/api/v1/providers/select", json={"provider": "invalid-llm"})
     assert bad_select.status_code == 422
 
-    # 3. POST /api/v1/providers/anthropic/key (with temporary key file path)
-    with patch("app.providers.manager.SECRETS_DIR", tmp_path):
-        with patch("app.providers.manager.ANTHROPIC_KEY_FILE", tmp_path / "anthropic_key"):
-            key_resp = client.post("/api/v1/providers/anthropic/key", json={"api_key": "sk-ant-test-runtime-key"})
+    # 3. POST /api/v1/providers/gemini/key with live validation
+    with patch("app.providers.manager.SECRETS_DIR", tmp_path), \
+         patch("app.providers.manager.GEMINI_KEY_FILE", tmp_path / "gemini_key"):
+
+        # 3a. Invalid key fails, active remains ollama
+        with patch.object(manager, "validate_gemini_key", new_callable=AsyncMock) as mock_val_gem:
+            mock_val_gem.return_value = (False, "API key not valid")
+            bad_key_resp = client.post("/api/v1/providers/gemini/key", json={"api_key": "bad-key"})
+            assert bad_key_resp.status_code == 400
+            assert "API key not valid" in bad_key_resp.json()["detail"]
+            assert manager.get_active_provider() == "ollama"
+            assert manager.get_gemini_api_key() is None
+
+        # 3b. Empty key fails
+        empty_key = client.post("/api/v1/providers/gemini/key", json={"api_key": "   "})
+        assert empty_key.status_code == 400
+
+        # 3c. Valid key succeeds and activates Gemini
+        with patch.object(manager, "validate_gemini_key", new_callable=AsyncMock) as mock_val_gem:
+            mock_val_gem.return_value = (True, "API key is valid.")
+            key_resp = client.post("/api/v1/providers/gemini/key", json={"api_key": "AIzaSyTestValidRuntimeKey"})
             assert key_resp.status_code == 200
-            assert key_resp.json()["active_provider"] == "anthropic"
-            ant_info = next(p for p in key_resp.json()["providers"] if p["id"] == "anthropic")
+            assert key_resp.json()["active_provider"] == "gemini"
+            assert manager.get_active_provider() == "gemini"
+            gem_p = next(p for p in key_resp.json()["providers"] if p["id"] == "gemini")
+            assert gem_p["configured"] is True
+            assert manager.get_gemini_api_key() == "AIzaSyTestValidRuntimeKey"
+
+    # 4. POST /api/v1/providers/anthropic/key with live validation
+    with patch("app.providers.manager.SECRETS_DIR", tmp_path), \
+         patch("app.providers.manager.ANTHROPIC_KEY_FILE", tmp_path / "anthropic_key"):
+
+        # 4a. Invalid key fails, active remains gemini
+        with patch.object(manager, "validate_anthropic_key", new_callable=AsyncMock) as mock_val_ant:
+            mock_val_ant.return_value = (False, "Invalid x-api-key")
+            bad_ant_resp = client.post("/api/v1/providers/anthropic/key", json={"api_key": "bad-ant-key"})
+            assert bad_ant_resp.status_code == 400
+            assert "Invalid x-api-key" in bad_ant_resp.json()["detail"]
+            assert manager.get_active_provider() == "gemini"
+
+        # 4b. Valid key succeeds and activates Anthropic
+        with patch.object(manager, "validate_anthropic_key", new_callable=AsyncMock) as mock_val_ant:
+            mock_val_ant.return_value = (True, "API key is valid.")
+            ant_resp = client.post("/api/v1/providers/anthropic/key", json={"api_key": "sk-ant-test-runtime-key"})
+            assert ant_resp.status_code == 200
+            assert ant_resp.json()["active_provider"] == "anthropic"
+            assert manager.get_active_provider() == "anthropic"
+            ant_info = next(p for p in ant_resp.json()["providers"] if p["id"] == "anthropic")
             assert ant_info["configured"] is True
-            assert manager.get_anthropic_api_key() == "sk-ant-test-runtime-key"
 
-            # Reject empty key
-            empty_key = client.post("/api/v1/providers/anthropic/key", json={"api_key": "   "})
-            assert empty_key.status_code == 400
+    # 5. Now that both are configured, switching via select works cleanly
+    sel_gemini = client.post("/api/v1/providers/select", json={"provider": "gemini"})
+    assert sel_gemini.status_code == 200
+    assert sel_gemini.json()["active_provider"] == "gemini"
+    assert manager.get_active_provider() == "gemini"
 
-    # Reset back to ollama and clear test key
-    client.post("/api/v1/providers/select", json={"provider": "ollama"})
+    sel_ollama = client.post("/api/v1/providers/select", json={"provider": "ollama"})
+    assert sel_ollama.status_code == 200
+    assert sel_ollama.json()["active_provider"] == "ollama"
     assert manager.get_active_provider() == "ollama"
+
+    # Reset test state
     manager._anthropic_api_key = None
+    manager._gemini_api_key = None
+    manager._active_provider = "ollama"

@@ -411,6 +411,24 @@ async function executeTurn(params) {
       const available = runtime.getModels().filter((m) => m.provider === "anthropic");
       model = available[0];
     }
+  } else if (provider === "gemini" || provider === "google") {
+    const apiKey = api_key || process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey.trim() === "") {
+      throw new Error(
+        "ProviderConfigurationError: Google Gemini API key is required when provider=gemini. " +
+          "Zero silent fallback to Ollama is permitted. Please configure an API key in the UI.",
+      );
+    }
+    process.env.GEMINI_API_KEY = apiKey;
+    try {
+      runtime.setRuntimeApiKey("google", apiKey);
+    } catch {}
+    const targetModel = model_name || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    model = runtime.getModel("google", targetModel);
+    if (!model) {
+      const available = runtime.getModels().filter((m) => m.provider === "google");
+      model = available.find((m) => m.id.includes("flash")) || available[0];
+    }
   } else {
     // Ollama default
     const targetModel = model_name || process.env.OLLAMA_MODEL || "llama3.1:8b";
